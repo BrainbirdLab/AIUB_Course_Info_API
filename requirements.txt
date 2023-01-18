@@ -1,0 +1,5 @@
+bs4
+flask
+flask_cors
+waitress
+requests
