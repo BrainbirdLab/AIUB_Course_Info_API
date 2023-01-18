@@ -52,7 +52,7 @@ def parseTime(timeString):
 
 
 def getCourseDetails(course):
-    match = re.match("^([0-9]+)-([A-Za-z0-9\s&]+) \[([A-Z0-9]+)\]$", course)
+    match = re.match("^([0-9]+)-([A-Za-z0-9()\&\.\s]+) \[([A-Z0-9]+)\]$", course)
 
     if match:
         course_id = match.group(1)
@@ -61,8 +61,208 @@ def getCourseDetails(course):
         section = match.group(3)
         return {"course_id": course_id, "course_name": course_name, "section": section}
     else:
+        print("Course not found in the string.", course)
         return {"course_id": "", "course_name": "", "section": ""}
 
+
+
+DATA = {
+    "2022-2023, Fall": {
+        "Monday": {
+            "08:00 AM - 09:30 AM": {
+                "course_id": "01604",
+                "course_name": "Diff Calculus And Coordinate Geometry",
+                "room": "DS0607",
+                "section": "B19",
+                "type": "Theory"
+            },
+            "09:30 AM - 11:00 AM": {
+                "course_id": "01263",
+                "course_name": "Introduction To Programming",
+                "room": "DS0607",
+                "section": "B19",
+                "type": "Theory"
+            },
+            "12:30 PM - 02:00 PM": {
+                "course_id": "01451",
+                "course_name": "Physics 1",
+                "room": "DS0607",
+                "section": "B19",
+                "type": "Theory"
+            }
+        },
+        "Sunday": {
+            "02:00 PM - 05:00 PM": {
+                "course_id": "01221",
+                "course_name": "Introduction To Computer Studies",
+                "room": "DS0207",
+                "section": "B19",
+                "type": "Lab"
+            },
+            "08:00 AM - 11:00 AM": {
+                "course_id": "01518",
+                "course_name": "Physics 1 Lab",
+                "room": "6103",
+                "section": "B19",
+                "type": "Lab"
+            },
+            "11:00 AM - 12:30 PM": {
+                "course_id": "00157",
+                "course_name": "English Reading Skills & Public Speaking",
+                "room": "DS0607",
+                "section": "B19",
+                "type": "Theory"
+            }
+        },
+        "Tuesday": {
+            "02:00 PM - 05:00 PM": {
+                "course_id": "01284",
+                "course_name": "Introduction To Programming Lab",
+                "room": "DS0204",
+                "section": "B19",
+                "type": "Lab"
+            },
+            "11:00 AM - 12:30 PM": {
+                "course_id": "00157",
+                "course_name": "English Reading Skills & Public Speaking",
+                "room": "DS0607",
+                "section": "B19",
+                "type": "Theory"
+            }
+        },
+        "Wednesday": {
+            "08:00 AM - 09:30 AM": {
+                "course_id": "01604",
+                "course_name": "Diff Calculus And Coordinate Geometry",
+                "room": "DS0607",
+                "section": "B19",
+                "type": "Theory"
+            },
+            "09:30 AM - 11:00 AM": {
+                "course_id": "01263",
+                "course_name": "Introduction To Programming",
+                "room": "DS0607",
+                "section": "B19",
+                "type": "Theory"
+            },
+            "12:30 PM - 02:00 PM": {
+                "course_id": "01451",
+                "course_name": "Physics 1",
+                "room": "DS0607",
+                "section": "B19",
+                "type": "Theory"
+            }
+        }
+    },
+    "2022-2023, Spring": {
+        "Monday": {
+            "02:40 PM - 04:20 PM": {
+                "course_id": "02364",
+                "course_name": "Object Oriented Programming 1 (Java)",
+                "room": "DN0709",
+                "section": "V",
+                "type": "Theory"
+            },
+            "08:00 AM - 10:30 AM": {
+                "course_id": "01212",
+                "course_name": "Introduction To Electrical Circuits Lab",
+                "room": "DS0305",
+                "section": "A",
+                "type": "Lab"
+            }
+        },
+        "Sunday": {
+            "01:00 PM - 02:15 PM": {
+                "course_id": "01491",
+                "course_name": "Discrete Mathematics",
+                "room": "DN0609",
+                "section": "R",
+                "type": "Theory"
+            },
+            "02:15 PM - 03:30 PM": {
+                "course_id": "02256",
+                "course_name": "Introduction To Electrical Circuits",
+                "room": "1108",
+                "section": "O",
+                "type": "Theory"
+            },
+            "03:30 PM - 06:00 PM": {
+                "course_id": "02371",
+                "course_name": "Physics 2 Lab",
+                "room": "6105",
+                "section": "Y",
+                "type": "Lab"
+            },
+            "08:00 AM - 09:15 AM": {
+                "course_id": "01688",
+                "course_name": "Physics 2",
+                "room": "5116",
+                "section": "X",
+                "type": "Theory"
+            },
+            "10:30 AM - 11:45 AM": {
+                "course_id": "01749",
+                "course_name": "Integral Calculus & Ord. Diff Equation",
+                "room": "6107",
+                "section": "E",
+                "type": "Theory"
+            }
+        },
+        "Tuesday": {
+            "01:00 PM - 02:15 PM": {
+                "course_id": "01491",
+                "course_name": "Discrete Mathematics",
+                "room": "DN0609",
+                "section": "R",
+                "type": "Theory"
+            },
+            "02:15 PM - 03:30 PM": {
+                "course_id": "02256",
+                "course_name": "Introduction To Electrical Circuits",
+                "room": "1108",
+                "section": "O",
+                "type": "Theory"
+            },
+            "08:00 AM - 09:15 AM": {
+                "course_id": "01688",
+                "course_name": "Physics 2",
+                "room": "5116",
+                "section": "X",
+                "type": "Theory"
+            },
+            "10:30 AM - 11:45 AM": {
+                "course_id": "01749",
+                "course_name": "Integral Calculus & Ord. Diff Equation",
+                "room": "6107",
+                "section": "E",
+                "type": "Theory"
+            }
+        },
+        "Wednesday": {
+            "03:30 PM - 06:00 PM": {
+                "course_id": "02364",
+                "course_name": "Object Oriented Programming 1 (Java)",
+                "room": "DS0203",
+                "section": "V",
+                "type": "Lab"
+            },
+            "08:00 AM - 10:30 AM": {
+                "course_id": "01159",
+                "course_name": "Computer Aided Design & Drafting",
+                "room": "DN0209",
+                "section": "C",
+                "type": "Lab"
+            }
+        }
+    }
+}
+
+
+@app.route('/test', methods=['POST'])
+@cross_origin(supports_credentials=True)
+def test():
+    print('Sending Dummy Data')
+    return flask.jsonify({'data': DATA, 'user': 'HASAN, MD. FUAD [22-49355-3]'})
 
 # get the username, password from the request and forward the request to its destination
 @app.route('/', methods=['POST'])
@@ -97,7 +297,6 @@ def forward_request():
  
     for target in targets:
         semesters[target.text] = []
-        coursesArray = []
         # print('Semester: ', target.text)
         #make a request for each semester, send the cookies and get the response
         match = re.search(r'q=(.*)', target.attrs['value'])
@@ -109,33 +308,28 @@ def forward_request():
 
             rawCourseElements = table[1].select("td:first-child")
 
-            coursesArray = []
+            coursesObj = {}
 
             for course in rawCourseElements:
                 if course.text != '':
+                    #The course name from the DOM
                     courseName = course.select_one("a").text
-
+                    parsedCourse = getCourseDetails(courseName)
+                    #The time from the DOM 
                     courseTimes = course.select("div > span")
 
-                    times = []
                     for time in courseTimes:
                         parsedTime = parseTime(time.text)
-                        times.append(parsedTime)
-                    
-                    parsedCourse = getCourseDetails(courseName)
-                    courseInfo = {}
-                    courseInfo["course_id"] = parsedCourse["course_id"]
-                    courseInfo["course_name"] = parsedCourse['course_name']
-                    courseInfo["section"] = parsedCourse["section"]
-                    courseInfo["times"] = times
+                        if coursesObj.get(parsedTime['day']) == None:
+                            coursesObj[parsedTime['day']] = {}
 
-                    coursesArray.append(courseInfo)
+                        coursesObj[parsedTime['day']][parsedTime['time']] = {'course_name': parsedCourse['course_name'], 'course_id': parsedCourse['course_id'], 'section': parsedCourse['section'], 'type': parsedTime['type'], 'room': parsedTime['room']}
 
             #print('Courses by semester: ', coursesBySemester)
         else:
             return flask.Response('Error in request', status='403', mimetype='text/html')
         #print('Adding on Semester: ', target.text, ' => ', coursesArray)
-        semesters[target.text] = coursesArray
+        semesters[target.text] = coursesObj
 
     print('Returning response')
     #print(semesters)
