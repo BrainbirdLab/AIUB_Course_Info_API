@@ -64,7 +64,9 @@ def getCourseDetails(course):
         print("Course not found in the string.", course)
         return {"course_id": "", "course_name": "", "section": ""}
 
-
+@app.route('/', methods=['GET'])
+def home():
+    return ':)'
 
 # get the username, password from the request and forward the request to its destination
 @app.route('/', methods=['POST'])
