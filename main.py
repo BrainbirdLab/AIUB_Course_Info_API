@@ -138,7 +138,7 @@ def forward_request():
     print('Returning response')
     #print(semesters)
 
-    return flask.jsonify({'data': semesters, 'user': f'{User} [{username}]'})
+    return flask.jsonify({'data': semesters, 'user': User})
 
     
 if __name__ == '__main__':
