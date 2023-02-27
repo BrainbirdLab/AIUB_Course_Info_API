@@ -52,7 +52,8 @@ def parseTime(timeString):
 
 
 def getCourseDetails(course):
-    match = re.match("^([0-9]+)-([A-Za-z0-9()\&\.\s]+) \[([A-Z0-9]+)\]$", course)
+    
+    match = re.match("^(\d+)-(.+?)\s+\[(\w+)\](?:\s+\[(\w+)\])?$", course)
 
     if match:
         course_id = match.group(1)
@@ -123,6 +124,10 @@ def forward_request():
                     courseTimes = course.select("div > span")
 
                     for time in courseTimes:
+                        #if time.text doesn't contain 'Time' then skip
+                        if 'Time' not in time.text:
+                            continue
+
                         parsedTime = parseTime(time.text)
                         if coursesObj.get(parsedTime['day']) == None:
                             coursesObj[parsedTime['day']] = {}
@@ -136,7 +141,6 @@ def forward_request():
         semesters[target.text] = coursesObj
 
     print('Returning response')
-    #print(semesters)
 
     return flask.jsonify({'data': semesters, 'user': User})
 
