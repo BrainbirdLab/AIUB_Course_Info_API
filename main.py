@@ -87,7 +87,7 @@ def forward_request():
         return flask.Response('Error in request', status='403', mimetype='text/html')
 
     #if response url contains https://portal.aiub.edu/Student/AnyThing then login is successful
-    if 'https://portal.aiub.edu/Student' in response.url:
+    if 'https://portal.aiub.edu/Student' not in response.url:
         # if the login is not successful, return the error with the status code
         return flask.Response('Invalid username or password', status='401', mimetype='text/html')
 
