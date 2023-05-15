@@ -12,8 +12,8 @@ app = flask.Flask(__name__)
 #get the port number from the environment variable PORT, if not found, use 5000
 PORT = int(os.environ.get('PORT', 5000))
 
-# enable CORS for all domains
-CORS(app, support_credentials=True)
+# allow all domains to access this server
+cors = CORS(app)
 
 def parseTime(timeString):
 
@@ -69,7 +69,7 @@ def getCourseDetails(course):
 def home():
     return ':)'
 
-# get the username, password from the request and forward the request to its destination
+# get the username, password from the request and forward the request to its destination\
 @app.route('/', methods=['POST'])
 @cross_origin(supports_credentials=True)
 def forward_request():
