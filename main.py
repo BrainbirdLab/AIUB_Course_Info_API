@@ -52,18 +52,18 @@ def parseTime(timeString):
 
 
 def getCourseDetails(course):
-    
-    match = re.match("^(\d+)-(.+?)\s+\[(\w+)\](?:\s+\[(\w+)\])?$", course)
+
+    match = re.match(r"^(\d+)-(.+?)\s+\[([A-Z]+)\](?:\s+\[([A-Z]+)\])?$", course)
 
     if match:
         course_id = match.group(1)
-        course_name = match.group(2)
-        course_name = course_name.title()
-        section = match.group(3)
+        course_name = match.group(2).title()
+        section = match.group(4) if match.group(4) else match.group(3)
         return {"course_id": course_id, "course_name": course_name, "section": section}
     else:
-        print("Course not found in the string.", course)
+        print("Course not found in the string:", course)
         return {"course_id": "", "course_name": "", "section": ""}
+
 
 @app.route('/', methods=['GET'])
 def home():
