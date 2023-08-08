@@ -53,7 +53,7 @@ def parseTime(timeString):
 
 def getCourseDetails(course):
 
-    match = re.match(r"^(\d+)-(.+?)\s+\[([A-Z]+)\](?:\s+\[([A-Z]+)\])?$", course)
+    match = re.match(r"^(\d+)-(.+?)\s+\[([A-Z0-9]+)\](?:\s+\[([A-Z0-9]+)\])?$", course)
 
     if match:
         course_id = match.group(1)
