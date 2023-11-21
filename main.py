@@ -9,13 +9,20 @@ import os
 import re
 import concurrent.futures
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = flask.Flask(__name__)
 #get the port number from the environment variable PORT, if not found, use 5000
 PORT = int(os.environ.get('PORT', 5000))
 
-# allow all domains to access this server
-cors = CORS(app)
+client_url = os.environ.get('CLIENT_URL')
+
+print(f'Client url: {client_url}')
+
+# allow CORS to client_url
+cors = CORS(app, resources={r"/": {"origins": client_url}})
 
 def parseTime(timeString):
 

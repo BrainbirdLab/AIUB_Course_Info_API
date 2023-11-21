@@ -3,4 +3,4 @@ flask
 flask_cors
 waitress
 requests
-aiohttp
+python-dotenv
