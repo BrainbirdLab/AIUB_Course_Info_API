@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import os
 import re
+import concurrent.futures
+import json
 
 app = flask.Flask(__name__)
 #get the port number from the environment variable PORT, if not found, use 5000
@@ -56,99 +58,165 @@ def getCourseDetails(course):
     match = re.match(r"^(\d+)-(.+?)\s+\[([A-Z0-9]+)\](?:\s+\[([A-Z0-9]+)\])?$", course)
 
     if match:
-        course_id = match.group(1)
+        class_id = match.group(1)
         course_name = match.group(2).title()
         section = match.group(4) if match.group(4) else match.group(3)
-        return {"course_id": course_id, "course_name": course_name, "section": section}
+        return {"class_id": class_id, "course_name": course_name, "section": section}
     else:
         print("Course not found in the string:", course)
-        return {"course_id": "", "course_name": "", "section": ""}
+        return {"class_id": "", "course_name": "", "section": ""}
 
 
 @app.route('/', methods=['GET'])
 def home():
-    return ':)'
+    return "<h1>Course Details API</h1><p>This site is a prototype API for course details.</p>"
 
-# get the username, password from the request and forward the request to its destination\
+
+def process_semester(target, session, cookies):
+    semesters = {}
+    match = re.search(r'q=(.*)', target.attrs['value'])
+    if match:
+        rq_url = 'https://portal.aiub.edu/Student/Registration?q=' + match.group(1)
+        response = session.get(rq_url, cookies=cookies)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        table = soup.select("table")
+        rawCourseElements = table[1].select("td:first-child")
+        coursesObj = {}
+        for course in rawCourseElements:
+            if course.text != '':
+                courseName = course.select_one("a").text
+                parsedCourse = getCourseDetails(courseName)
+                courseTimes = course.select("div > span")
+                for time in courseTimes:
+                    if 'Time' not in time.text:
+                        continue
+                    parsedTime = parseTime(time.text)
+                    if coursesObj.get(parsedTime['day']) == None:
+                        coursesObj[parsedTime['day']] = {}
+                    coursesObj[parsedTime['day']][parsedTime['time']] = {'course_name': parsedCourse['course_name'], 'class_id': parsedCourse['class_id'], 'section': parsedCourse['section'], 'type': parsedTime['type'], 'room': parsedTime['room']}
+        semesters[target.text] = coursesObj
+    return semesters
+
+
+def process_curriculum(ID: str, session, cookies):
+    # request the getCurricumnLink?IDd=curriculumId
+    courseMap = {}
+    #print(f'Getting data for curriculum https://portal.aiub.edu/Common/Curriculum?ID={ID}')
+    response = session.get(f'https://portal.aiub.edu/Common/Curriculum?ID={ID}', cookies=cookies)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    table = soup.select('.table-bordered tr:not(:first-child)')
+    #print(f'{len(table)} courses extracted')
+
+    for course in table:
+        #print(course)
+        courseCode = course.select_one('td:nth-child(1)').text.strip()
+        courseName = course.select_one('td:nth-child(2)').text.strip()
+        credit = course.select_one('td:nth-child(3)').text.strip()
+        # credit is 3 0 0 0, 1 1 0 0 format. Split it, Sort it and get the largest number as credit
+        credit = sorted([int(c) for c in credit.split(' ')], reverse=True)[0]
+        prerequisites = [li.text.strip() for li in course.select('td:nth-child(4) li')]
+        courseMap[courseCode] = {'course_name': courseName, 'credit': credit, 'prerequisites': prerequisites}
+
+    return courseMap
+
+
+def getCurricumnData(cookies, session):
+    getCurricumnLink = 'https://portal.aiub.edu/Student/Curriculum'
+    response = session.get(getCurricumnLink, cookies=cookies)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    targetElements = soup.select('[curriculumid]')
+    curricumnID = []
+    for target in targetElements:
+        # attribute value is the curriculum id
+        curricumnID.append(target.attrs['curriculumid'])
+
+    #print(curricumnID)
+
+    courseMap = {} # will contain the course code as key and {coursename, prerequisit[]} as value
+
+    #for ID in curricumnID:
+    # use multithreading to process the curriculums
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(process_curriculum, ID, session, cookies) for ID in curricumnID]
+        for future in concurrent.futures.as_completed(futures):
+            courseMap.update(future.result())
+
+    return courseMap
+
+
+def getGradeReport(cookies, session):
+    url = 'https://portal.aiub.edu/Student/GradeReport/ByCurriculum'
+    response = session.get(url, cookies=cookies)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    rows = soup.select('table:not(:first-child) tr:not(:first-child)')
+    # first td contains the course code, second td contains the course name, third td contains the grade
+    grades = {}
+    for row in rows:
+        courseCode = row.select_one('td:nth-child(1)').text.strip()
+        courseName = row.select_one('td:nth-child(2)').text.strip()
+        grade = row.select_one('td:nth-child(3)').text.strip()
+        grades[courseCode] = {'course_name': courseName, 'grade': grade}
+    return grades
+
+
+
 @app.route('/', methods=['POST'])
 @cross_origin(supports_credentials=True)
 def forward_request():
-    print('Proxy request recieved')
     username = flask.request.form['UserName']
     password = flask.request.form['Password']
     url = 'https://portal.aiub.edu'
     
     session = requests.Session()
-
     response = session.post(url, data={'UserName': username, 'Password': password})
 
     if response.status_code != 200:
-        # if the request is not successful, return the error with the status code
         return flask.Response('Error in request', status='403', mimetype='text/html')
 
-    #if response url contains https://portal.aiub.edu/Student/AnyThing then login is successful
     if 'https://portal.aiub.edu/Student' not in response.url:
-        # if the login is not successful, return the error with the status code
         return flask.Response('Invalid username or password', status='401', mimetype='text/html')
 
     print('Login successful')
 
-    #go to https://portal.aiub.edu/Student/Home/Index/5
     response = session.get('https://portal.aiub.edu/Student')
-
     cookies = session.cookies.get_dict()
 
     soup = BeautifulSoup(response.text, 'html.parser')
     targets = soup.select("#SemesterDropDown > option")
     User = soup.select_one('.navbar-link').text
-      
+    User = User.split(',')[1].strip() + ' ' + User.split(',')[0].strip()
+    User = User.title()
+
     semesters = {}
- 
-    for target in targets:
-        semesters[target.text] = []
-        # print('Semester: ', target.text)
-        #make a request for each semester, send the cookies and get the response
-        match = re.search(r'q=(.*)', target.attrs['value'])
-        if match:
-            rq_url = 'https://portal.aiub.edu/Student/Registration?q=' + match.group(1)
-            response = session.get(rq_url,  cookies=cookies)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.select("table")
+    courseMap = {}
+    gradesMap = {}
 
-            rawCourseElements = table[1].select("td:first-child")
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Execute getCurricumnData concurrently
+        courseMap_future = executor.submit(getCurricumnData, cookies, session)
 
-            coursesObj = {}
+        gradesMap_future = executor.submit(getGradeReport, cookies, session)
 
-            for course in rawCourseElements:
-                if course.text != '':
-                    #The course name from the DOM
-                    courseName = course.select_one("a").text
-                    parsedCourse = getCourseDetails(courseName)
-                    #The time from the DOM 
-                    courseTimes = course.select("div > span")
+        # Execute process_semester concurrently for each target
+        futures = [executor.submit(process_semester, target, session, cookies) for target in targets]
 
-                    for time in courseTimes:
-                        #if time.text doesn't contain 'Time' then skip
-                        if 'Time' not in time.text:
-                            continue
+        # Wait for getCurricumnData to complete and retrieve the result
+        courseMap = courseMap_future.result()
 
-                        parsedTime = parseTime(time.text)
-                        if coursesObj.get(parsedTime['day']) == None:
-                            coursesObj[parsedTime['day']] = {}
+        # Wait for getGradeReport to complete and retrieve the result
+        gradesMap = gradesMap_future.result()
 
-                        coursesObj[parsedTime['day']][parsedTime['time']] = {'course_name': parsedCourse['course_name'], 'course_id': parsedCourse['course_id'], 'section': parsedCourse['section'], 'type': parsedTime['type'], 'room': parsedTime['room']}
-
-            #print('Courses by semester: ', coursesBySemester)
-        else:
-            return flask.Response('Error in request', status='403', mimetype='text/html')
-        #print('Adding on Semester: ', target.text, ' => ', coursesArray)
-        semesters[target.text] = coursesObj
+        # Wait for process_semester tasks to complete and update semesters
+        for future in concurrent.futures.as_completed(futures):
+            semesters.update(future.result())
 
     print('Returning response')
 
-    return flask.jsonify({'data': semesters, 'user': User})
+    result = {'semesters': semesters, 'courseMap': courseMap, 'gradesMap': gradesMap, 'user': User}
 
-    
+    return flask.jsonify(result)
+
+
 if __name__ == '__main__':
     from waitress import serve
     print(f'Server started on port {PORT}')
