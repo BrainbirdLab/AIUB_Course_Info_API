@@ -9,6 +9,7 @@ import os
 import re
 import concurrent.futures
 import json
+import random
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -75,9 +76,47 @@ def getCourseDetails(course):
         return {"class_id": "", "course_name": "", "section": ""}
 
 
+emojis = {
+    '😊',
+    '😉',
+    '😎',
+    '😍',
+    '😘',
+    '😗',
+    '😙',
+    '👾',
+    '👽',
+    '👻',
+    '👺',
+    '🐳',
+    '😁',
+    '😆',
+    '😑',
+    '😐',
+    '😪',
+    '😴',
+    '😖',
+    '😞',
+    '😭',
+    '😢',
+    '😵',
+    '😵‍💫',
+    '😷',
+    '🥺',
+    '🥹'
+}
+
+#disable cross origin form post
+app.config['CORS_ALLOW_HEADERS'] = ['Content-Type']
+app.config['CORS_EXPOSE_HEADERS'] = ['Content-Type']
+app.config['CORS_SUPPORTS_CREDENTIALS'] = True
+app.config['CORS_RESOURCES'] = {r"/": {"origins": client_url}}
+
 @app.route('/', methods=['GET'])
 def home():
-    return "<h1>AIUB SOLUTION API</h1><p>This site is a prototype API for development.</p>"
+    #return a random emoji
+    random_emoji = random.choice(list(emojis))
+    return flask.Response(random_emoji, status=200, mimetype='text/html')
 
 
 def process_semester(target, session, cookies):
