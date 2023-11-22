@@ -25,14 +25,12 @@ print(f'Client url: {client_url}')
 cors = CORS(app, resources={r"/": {"origins": client_url}})
 
 def parseTime(timeString):
-
-    match = re.findall(r'\d{1,2}:\d{1,2}(?:\s?[ap]m|\s?[AP]M)?', timeString)
-    dayMap = {'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday'}
-    class_type = re.search(r'\((.*?)\)', timeString).group(1)
-    day = dayMap[re.search(r'(Sun|Mon|Tue|Wed)', timeString).group()]
-    room = re.search(r'Room: (.*)', timeString).group(1)
-
     try:
+        match = re.findall(r'\d{1,2}:\d{1,2}(?:\s?[ap]m|\s?[AP]M)?', timeString)
+        dayMap = {'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'}
+        class_type = re.search(r'\((.*?)\)', timeString).group(1)
+        day = dayMap[re.search(r'(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', timeString).group()]
+        room = re.search(r'Room: (.*)', timeString).group(1)
         start_time, end_time = match[0], match[1]
         start_time_obj = ''
         end_time_obj = ''
@@ -63,45 +61,57 @@ def parseTime(timeString):
 def getCourseDetails(course):
 
     match = re.match(r"^(\d+)-(.+?)\s+\[([A-Z0-9]+)\](?:\s+\[([A-Z0-9]+)\])?$", course)
-
-    if match:
-        class_id = match.group(1)
-        course_name = match.group(2).title()
-        section = match.group(4) if match.group(4) else match.group(3)
-        return {"class_id": class_id, "course_name": course_name, "section": section}
-    else:
+    try:
+        if match:
+            class_id = match.group(1)
+            course_name = match.group(2).title()
+            section = match.group(4) if match.group(4) else match.group(3)
+            return {"class_id": class_id, "course_name": course_name, "section": section}
+        else:
+            print("Course not found in the string:", course)
+            return {"class_id": "", "course_name": "", "section": ""}
+    except IndexError:
         print("Course not found in the string:", course)
         return {"class_id": "", "course_name": "", "section": ""}
 
 
 @app.route('/', methods=['GET'])
 def home():
-    return "<h1>Course Details API</h1><p>This site is a prototype API for course details.</p>"
+    return "<h1>AIUB SOLUTION API</h1><p>This site is a prototype API for development.</p>"
 
 
 def process_semester(target, session, cookies):
     semesters = {}
     match = re.search(r'q=(.*)', target.attrs['value'])
-    if match:
-        rq_url = 'https://portal.aiub.edu/Student/Registration?q=' + match.group(1)
-        response = session.get(rq_url, cookies=cookies)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.select("table")
-        rawCourseElements = table[1].select("td:first-child")
-        coursesObj = {}
-        for course in rawCourseElements:
-            if course.text != '':
-                courseName = course.select_one("a").text
-                parsedCourse = getCourseDetails(courseName)
-                courseTimes = course.select("div > span")
-                for time in courseTimes:
-                    if 'Time' not in time.text:
-                        continue
-                    parsedTime = parseTime(time.text)
-                    if coursesObj.get(parsedTime['day']) == None:
-                        coursesObj[parsedTime['day']] = {}
-                    coursesObj[parsedTime['day']][parsedTime['time']] = {'course_name': parsedCourse['course_name'], 'class_id': parsedCourse['class_id'], 'section': parsedCourse['section'], 'type': parsedTime['type'], 'room': parsedTime['room']}
-        semesters[target.text] = coursesObj
+    if match is not None and len(match.groups()) > 0:
+        try:
+            rq_url = 'https://portal.aiub.edu/Student/Registration?q=' + match.group(1)
+            #print(f'Processing semester {match.group(1)}')
+            response = session.get(rq_url, cookies=cookies)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.select("table")
+            rawCourseElements = table[1].select("td:first-child")
+            #print(rawCourseElements)
+            coursesObj = {}
+            for course in rawCourseElements:
+                if course.text != '':
+                    courseName = course.select_one("a").text
+                    parsedCourse = getCourseDetails(courseName)
+                    courseTimes = course.select("div > span")
+                    # credit is the next sibling td
+                    credit = course.findNext('td').text.strip() # credit is in the format  3 - 0 - 0 - 0 - 0, So split it, sort it and get the largest number as credit
+                    credit = sorted([int(c.strip()) for c in credit.split('-')], reverse=True)[0]
+                    #print(courseName, credit)
+                    for time in courseTimes:
+                        if 'Time' not in time.text:
+                            continue
+                        parsedTime = parseTime(time.text)
+                        if coursesObj.get(parsedTime['day']) == None:
+                            coursesObj[parsedTime['day']] = {}
+                        coursesObj[parsedTime['day']][parsedTime['time']] = {'course_name': parsedCourse['course_name'], 'class_id': parsedCourse['class_id'], 'credit': credit, 'section': parsedCourse['section'], 'type': parsedTime['type'], 'room': parsedTime['room']}
+            semesters[target.text] = coursesObj
+        except Exception as e:
+            print('Error in process_semester: ', e)
     return semesters
 
 
@@ -169,7 +179,7 @@ def getCompletedCourses(cookies, session, currentSemester: str):
         matches = re.findall(r'\(([^)]+)\)\s*\[([^\]]+)\]', results)
 
         # Check if there are any matches
-        if matches:
+        if matches is not None and len(matches) > 0:
             # Get the last match
             last_result = matches[-1]
             # Extract grade and semester from the last result
