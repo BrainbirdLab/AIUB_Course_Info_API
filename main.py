@@ -151,77 +151,159 @@ def getCurricumnData(cookies, session):
     return courseMap
 
 
-def getGradeReport(cookies, session):
+def getCompletedCourses(cookies, session, currentSemester: str):
     url = 'https://portal.aiub.edu/Student/GradeReport/ByCurriculum'
     response = session.get(url, cookies=cookies)
     soup = BeautifulSoup(response.text, 'html.parser')
-    rows = soup.select('table:not(:first-child) tr:not(:first-child)')
+    rows = soup.select('table:not(:first-child) tr:not(:first-child):has(td:nth-child(3):not(:empty))')
     # first td contains the course code, second td contains the course name, third td contains the grade
-    grades = {}
+    completedCourses = {}
+    currentSemesterCourses = {}
     for row in rows:
         courseCode = row.select_one('td:nth-child(1)').text.strip()
         courseName = row.select_one('td:nth-child(2)').text.strip()
-        grade = row.select_one('td:nth-child(3)').text.strip()
-        grades[courseCode] = {'course_name': courseName, 'grade': grade}
-    return grades
+        results = row.select_one('td:nth-child(3)').text.strip() # grade is in the format (2022-2023, Fall) [W] (2022-2023, Summer) [D]
+
+    
+        # Use regular expressions to extract the last result
+        matches = re.findall(r'\(([^)]+)\)\s*\[([^\]]+)\]', results)
+
+        # Check if there are any matches
+        if matches:
+            # Get the last match
+            last_result = matches[-1]
+            # Extract grade and semester from the last result
+            semester, grade = last_result
+            grade = grade.strip()
+            semester = semester.strip()
+        else:
+            continue
+
+        #print (f'{courseCode} {courseName} {grade} {semester}')
+        if grade in ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F']:
+            completedCourses[courseCode] = {'course_name': courseName, 'grade': grade}
+        elif semester == currentSemester:
+            currentSemesterCourses[courseCode] = {'course_name': courseName, 'grade': grade}
+        
+    return completedCourses, currentSemesterCourses
 
 
 
 @app.route('/', methods=['POST'])
 @cross_origin(supports_credentials=True)
 def forward_request():
-    username = flask.request.form['UserName']
-    password = flask.request.form['Password']
-    url = 'https://portal.aiub.edu'
+
+    try:
+        print('Processing request...')
+        username = flask.request.form['UserName']
+        password = flask.request.form['Password']
+        url = 'https://portal.aiub.edu'
+        
+        session = requests.Session()
+        response = session.post(url, data={'UserName': username, 'Password': password})
+
+        if response.status_code != 200:
+            #return flask.Response('Error in request', status='403', mimetype='text/html')
+            return flask.Response(json.dumps({'success': False, 'message': 'Error in request'}), status=403, mimetype='application/json')
+
+        if 'https://portal.aiub.edu/Student' not in response.url:
+            #return flask.Response('Invalid username or password', status='401', mimetype='text/html')
+            print('Login failed')
+            return flask.Response(json.dumps({'success': False, 'message': 'Invalid username or password'}), status=401, mimetype='application/json')
+
+        print('Login successful')
+
+        response = session.get('https://portal.aiub.edu/Student')
+        cookies = session.cookies.get_dict()
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        targets = soup.select("#SemesterDropDown > option")
+        User = soup.select_one('.navbar-link').text
+        User = User.split(',')[1].strip() + ' ' + User.split(',')[0].strip()
+        User = User.title()
+
+        currentSemester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
+        semesterClassRoutine = {} # contains all semester info
+        courseMap = {} # contains all course info
+        completedCourses = {} # contains all completed courses info
+        currentSemesterCourses = {} # contains all current semester courses info
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Execute getCurricumnData concurrently
+            courseMap_future = executor.submit(getCurricumnData, cookies, session)
+
+            completedCoursesMap_future = executor.submit(getCompletedCourses, cookies, session, currentSemester)
+
+            # Execute process_semester concurrently for each target
+            futures = [executor.submit(process_semester, target, session, cookies) for target in targets]
+
+            # Wait for getCurricumnData to complete and retrieve the result
+            courseMap = courseMap_future.result()
+
+            # Wait for getGradeReport to complete and retrieve the result
+            completedCourses, currentSemesterCourses = completedCoursesMap_future.result()
+
+            # Wait for process_semester tasks to complete and update semesters
+            for future in concurrent.futures.as_completed(futures):
+                semesterClassRoutine.update(future.result())
+
+            
+        # sort the semesters by year
+        semesterClassRoutine = dict(sorted(semesterClassRoutine.items(), key=lambda x: x[0]))
+        
+        print('Processing data...')
+
+        unlockedCourses = {}
+        #iterate over the gradesMap. A student can take a course after completing the prerequisites. And also if he/she has taken the course before, he must have D grade
+        for courseCode, course in completedCourses.items():
+            #if student has taken the course before and has D grade, then he/she can take the course again
+            if course['grade'] == 'D':
+                unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': courseMap[courseCode]['credit'], 'prerequisites': courseMap[courseCode]['prerequisites'], 'retake': True}
+
+
+        for courseCode, course in courseMap.items():
+
+            if courseCode in completedCourses:
+                continue
+            # if course code has '#' or '*' then skip
+            if '#' in courseCode or '*' in courseCode:
+                continue
+            if course['course_name'] == 'INTERNSHIP':
+                continue
+            #if the course is already unlocked, then skip it
+            if courseCode in unlockedCourses:
+                continue
+            #if the course is in the current semester, but has not been dropped, then skip it
+            if courseCode in currentSemesterCourses and currentSemesterCourses[courseCode]['grade'] not in ['W', 'I']:
+                continue
+
+            prerequisites = course['prerequisites']
+            #if the course has no prerequisites, then it is unlocked
+            if len(prerequisites) == 0:
+                unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+                continue
+            #iterate over the prerequisites. If the student has taken every prerequisite, then the course is unlocked
+            prerequisitesMet = True
+            for prerequisite in prerequisites:
+                if prerequisite not in completedCourses:
+                    prerequisitesMet = False
+                    break
+            if prerequisitesMet:
+                unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+
+        # need to get more data like completed courses, credits_completed, credits_remaining, course_completed_count
+
+        result = {'semesterClassRoutine': semesterClassRoutine, 'unlockedCourses': unlockedCourses, 'completedCourses': completedCourses, 'currentSemester': currentSemester, 'user': User}
+
+        print('Sending response...')
+
+        #return flask.jsonify({'data': result, 'success': True, 'message': 'Success'})
+        return flask.Response(json.dumps({'result':result, 'success': True}), status=200, mimetype='application/json')
     
-    session = requests.Session()
-    response = session.post(url, data={'UserName': username, 'Password': password})
-
-    if response.status_code != 200:
-        return flask.Response('Error in request', status='403', mimetype='text/html')
-
-    if 'https://portal.aiub.edu/Student' not in response.url:
-        return flask.Response('Invalid username or password', status='401', mimetype='text/html')
-
-    print('Login successful')
-
-    response = session.get('https://portal.aiub.edu/Student')
-    cookies = session.cookies.get_dict()
-
-    soup = BeautifulSoup(response.text, 'html.parser')
-    targets = soup.select("#SemesterDropDown > option")
-    User = soup.select_one('.navbar-link').text
-    User = User.split(',')[1].strip() + ' ' + User.split(',')[0].strip()
-    User = User.title()
-
-    semesters = {}
-    courseMap = {}
-    gradesMap = {}
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Execute getCurricumnData concurrently
-        courseMap_future = executor.submit(getCurricumnData, cookies, session)
-
-        gradesMap_future = executor.submit(getGradeReport, cookies, session)
-
-        # Execute process_semester concurrently for each target
-        futures = [executor.submit(process_semester, target, session, cookies) for target in targets]
-
-        # Wait for getCurricumnData to complete and retrieve the result
-        courseMap = courseMap_future.result()
-
-        # Wait for getGradeReport to complete and retrieve the result
-        gradesMap = gradesMap_future.result()
-
-        # Wait for process_semester tasks to complete and update semesters
-        for future in concurrent.futures.as_completed(futures):
-            semesters.update(future.result())
-
-    print('Returning response')
-
-    result = {'semesters': semesters, 'courseMap': courseMap, 'gradesMap': gradesMap, 'user': User}
-
-    return flask.jsonify(result)
+    except Exception as e:
+        print(e)
+        #return flask.Response('Error in request', status='403', mimetype='text/html')
+        return flask.Response(json.dumps({'success': False, 'message': 'Something went wrong'}), status=500, mimetype='application/json')
 
 
 if __name__ == '__main__':
