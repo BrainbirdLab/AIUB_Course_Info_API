@@ -284,6 +284,7 @@ def forward_request():
         completedCourses = {} # contains all completed courses info
         currentSemesterCourses = {} # contains all current semester courses info
         unlockedCourses = {} # contains all unlocked courses info
+        preRegisteredCourses = {} # contains all pre-registered courses info
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Execute getCurricumnData concurrently
@@ -300,7 +301,7 @@ def forward_request():
             # Wait for getGradeReport to complete and retrieve the result
             completedCourses = completedCoursesMap_future.result()[0]
             currentSemesterCourses = completedCoursesMap_future.result()[1]
-            unlockedCourses = completedCoursesMap_future.result()[2]
+            preRegisteredCourses = completedCoursesMap_future.result()[2]
 
             # Wait for process_semester tasks to complete and update semesters
             for future in concurrent.futures.as_completed(futures):
@@ -333,6 +334,10 @@ def forward_request():
                 continue
             #if the course is in the current semester, but has not been dropped, then skip it
             if courseCode in currentSemesterCourses and currentSemesterCourses[courseCode]['grade'] not in ['W', 'I']:
+                continue
+            #if the course is in the pre-registered courses, then add it to the unlocked courses
+            if courseCode in preRegisteredCourses:
+                unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
                 continue
 
             prerequisites = course['prerequisites']
