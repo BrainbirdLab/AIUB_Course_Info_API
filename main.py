@@ -161,7 +161,7 @@ def getCurricumnData(cookies, session):
     return courseMap
 
 
-def getCompletedCourses(cookies, session, currentSemester: str):
+def getCompletedCourses(cookies, session, currentSemester: str): #gets all completed and attempted courses from the grade report
     url = 'https://portal.aiub.edu/Student/GradeReport/ByCurriculum'
     response = session.get(url, cookies=cookies)
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -169,6 +169,7 @@ def getCompletedCourses(cookies, session, currentSemester: str):
     # first td contains the course code, second td contains the course name, third td contains the grade
     completedCourses = {}
     currentSemesterCourses = {}
+    preRegisteredCourses = {}
     for row in rows:
         courseCode = row.select_one('td:nth-child(1)').text.strip()
         courseName = row.select_one('td:nth-child(2)').text.strip()
@@ -192,10 +193,16 @@ def getCompletedCourses(cookies, session, currentSemester: str):
         #print (f'{courseCode} {courseName} {grade} {semester}')
         if grade in ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F']:
             completedCourses[courseCode] = {'course_name': courseName, 'grade': grade}
-        elif semester == currentSemester:
-            currentSemesterCourses[courseCode] = {'course_name': courseName, 'grade': grade}
+            #print(f'Completed course: {courseCode} {courseName} {grade} {semester}')
+        elif grade == '-':
+            if semester == currentSemester:
+                currentSemesterCourses[courseCode] = {'course_name': courseName, 'grade': grade}
+                #print(f'Current semester course: {courseCode} {courseName} {grade} {semester}')
+            else:
+                preRegisteredCourses[courseCode] = {'course_name': courseName, 'grade': grade}
+                #print(f'Pre-registered course: {courseCode} {courseName} {grade} {semester}')
         
-    return completedCourses, currentSemesterCourses
+    return [completedCourses, currentSemesterCourses, preRegisteredCourses]
 
 
 
@@ -237,6 +244,7 @@ def forward_request():
         courseMap = {} # contains all course info
         completedCourses = {} # contains all completed courses info
         currentSemesterCourses = {} # contains all current semester courses info
+        unlockedCourses = {} # contains all unlocked courses info
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Execute getCurricumnData concurrently
@@ -251,7 +259,9 @@ def forward_request():
             courseMap = courseMap_future.result()
 
             # Wait for getGradeReport to complete and retrieve the result
-            completedCourses, currentSemesterCourses = completedCoursesMap_future.result()
+            completedCourses = completedCoursesMap_future.result()[0]
+            currentSemesterCourses = completedCoursesMap_future.result()[1]
+            unlockedCourses = completedCoursesMap_future.result()[2]
 
             # Wait for process_semester tasks to complete and update semesters
             for future in concurrent.futures.as_completed(futures):
@@ -263,7 +273,6 @@ def forward_request():
         
         print('Processing data...')
 
-        unlockedCourses = {}
         #iterate over the gradesMap. A student can take a course after completing the prerequisites. And also if he/she has taken the course before, he must have D grade
         for courseCode, course in completedCourses.items():
             #if student has taken the course before and has D grade, then he/she can take the course again
@@ -295,7 +304,7 @@ def forward_request():
             #iterate over the prerequisites. If the student has taken every prerequisite, then the course is unlocked
             prerequisitesMet = True
             for prerequisite in prerequisites:
-                if prerequisite not in completedCourses:
+                if prerequisite not in completedCourses and prerequisite not in currentSemesterCourses:
                     prerequisitesMet = False
                     break
             if prerequisitesMet:
