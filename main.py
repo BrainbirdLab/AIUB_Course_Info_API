@@ -323,6 +323,7 @@ def forward_request():
         for courseCode, course in courseMap.items():
 
             if courseCode in completedCourses:
+                completedCourses[courseCode]['credit'] = course['credit']
                 continue
             # if course code has '#' or '*' then skip
             if '#' in courseCode or '*' in courseCode:
@@ -353,6 +354,7 @@ def forward_request():
                     break
             if prerequisitesMet:
                 unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+
 
         # need to get more data like completed courses, credits_completed, credits_remaining, course_completed_count
 
