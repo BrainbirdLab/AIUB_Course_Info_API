@@ -1,6 +1,7 @@
 bs4
-flask
-flask_cors
+fastapi
+"uvicorn[standard]"
 waitress
 requests
 python-dotenv
+python-multipart
