@@ -2,7 +2,7 @@ bs4
 fastapi
 flask
 flask-cors
-"uvicorn[standard]"
+uvicorn
 waitress
 requests
 python-dotenv
