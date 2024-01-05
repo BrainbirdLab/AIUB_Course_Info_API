@@ -1,9 +1,5 @@
 bs4
 fastapi
-flask
-flask-cors
+aiohttp
 uvicorn
-waitress
-requests
 python-dotenv
-python-multipart
