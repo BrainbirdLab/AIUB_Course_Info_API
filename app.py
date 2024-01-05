@@ -1,15 +1,12 @@
 import aiohttp
 import asyncio
-from typing import Union
 from fastapi import FastAPI, Form
 from typing_extensions import Annotated
 from datetime import datetime
 from bs4 import BeautifulSoup
 from datetime import datetime
-import concurrent.futures
 import os
 import re
-import json
 import random
 from dotenv import load_dotenv
 
@@ -23,6 +20,13 @@ PORT = int(os.environ.get('PORT', 5000))
 client_url = os.environ.get('CLIENT_URL')
 
 print(f'Client url: {client_url}')
+
+# allow client url to access the api
+@app.middleware("http")
+async def add_process_time_header(request, call_next):
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = client_url
+    return response
 
 
 emojis = {
@@ -54,6 +58,8 @@ emojis = {
     '🥺',
     '🥹'
 }
+
+
 
 @app.get('/')
 async def home():
@@ -107,8 +113,6 @@ async def forward_request(UserName: Annotated[str, Form(...)], Password: Annotat
 
             # sort the semesters by year
             semesterClassRoutine = dict(sorted(semesterClassRoutine.items(), key=lambda x: x[0]))
-
-
 
             #iterate over the gradesMap. A student can take a course after completing the prerequisites. And also if he/she has taken the course before, he must have D grade
             unlockedCourses = {}
