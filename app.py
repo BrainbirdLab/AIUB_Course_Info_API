@@ -9,6 +9,7 @@ import os
 import re
 import random
 from dotenv import load_dotenv
+import uvicorn
 
 load_dotenv()
 
@@ -348,3 +349,7 @@ def getCourseDetails(course):
     except IndexError:
         print("Course not found in the string:", course)
         return {"class_id": "", "course_name": "", "section": ""}
+
+
+
+uvicorn.run(app, host='127.0.0.1', port=PORT)
