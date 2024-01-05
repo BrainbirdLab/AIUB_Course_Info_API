@@ -29,6 +29,7 @@ async def add_process_time_header(request, call_next):
     return response
 
 
+
 emojis = {
     '😊',
     '😉',
@@ -75,8 +76,6 @@ async def forward_request(UserName: Annotated[str, Form(...)], Password: Annotat
     print('Processing request...')
 
     url = 'https://portal.aiub.edu'
-
-    print(UserName, Password)
 
     async with aiohttp.ClientSession() as session:
         async with session.post(url, data={'UserName': UserName, 'Password': Password}) as response:
