@@ -94,10 +94,8 @@ async def forward_request(UserName: Annotated[str, Form(...)], Password: Annotat
             semesterClassRoutine = {}
 
             tasks = [process_semester(session, target) for target in targets]
-            task_getCurricumnData = asyncio.create_task(getCurricumnData(session))
-            task_getCompletedCourses = asyncio.create_task(getCompletedCourses(session, currentSemester))
 
-            result = await asyncio.gather(task_getCurricumnData, task_getCompletedCourses, *tasks)
+            result = await asyncio.gather(getCurricumnData(session), getCompletedCourses(session, currentSemester), *tasks)
 
             courseMap = result[0]
             completedCourses = result[1][0]
@@ -160,8 +158,8 @@ async def forward_request(UserName: Annotated[str, Form(...)], Password: Annotat
 
 async def getCompletedCourses(session, currentSemester: str): #gets all completed and attempted courses from the grade report
     # get the completed courses
+    print('Getting completed courses...')
     async with session.get('https://portal.aiub.edu/Student/GradeReport/ByCurriculum') as response:
-        print('Getting completed courses...')
         soup = BeautifulSoup(await response.text(), 'html.parser')
         rows = soup.select('table:not(:first-child) tr:not(:first-child):has(td:nth-child(3):not(:empty))')
         # first td contains the course code, second td contains the course name, third td contains the grade
@@ -203,9 +201,9 @@ async def getCompletedCourses(session, currentSemester: str): #gets all complete
 
 
 async def getCurricumnData(session):
+    print('Getting curriculum data...')
     # get the curriculum data
     async with session.get('https://portal.aiub.edu/Student/Curriculum') as response:
-        print('Getting curriculum data...')
         soup = BeautifulSoup(await response.text(), 'html.parser')
         targetElements = soup.select('[curriculumid]')
         curricumnID = []
