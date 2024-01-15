@@ -20,7 +20,7 @@ print(f'Client url: {client_url}')
 
 # allow client url to access the api
 @app.middleware("http")
-async def add_process_time_header(request, call_next):
+async def cors(request, call_next):
     response = await call_next(request)
     response.headers["Access-Control-Allow-Origin"] = client_url
     return response
