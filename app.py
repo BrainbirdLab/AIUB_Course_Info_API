@@ -75,81 +75,83 @@ async def forward_request(UserName: Annotated[str, Form(...)], Password: Annotat
     url = 'https://portal.aiub.edu'
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, data={'UserName': UserName, 'Password': Password}) as response:
-            if response.status != 200:
+        async with session.post(url, data={'UserName': UserName, 'Password': Password}) as resp:
+            if resp.status != 200:
                 return {'success': False, 'message': 'Error in request'}
 
-            if 'https://portal.aiub.edu/Student' not in str(response.url):
+            if 'https://portal.aiub.edu/Student' not in str(resp.url):
                 return {'success': False, 'message': 'Invalid username or password'}
 
             print('Login successful')
 
-            soup = BeautifulSoup(await response.text(), 'html.parser')
-            targets = soup.select("#SemesterDropDown > option")
-            User = soup.select_one('.navbar-link').text
-            User = User.split(',')[1].strip() + ' ' + User.split(',')[0].strip()
-            User = User.title()
+            async with session.get('https://portal.aiub.edu/Student') as res:
+                
+                soup = BeautifulSoup(await res.text(), 'html.parser')
+                targets = soup.select("#SemesterDropDown > option")
+                User = soup.select_one('.navbar-link').text
+                User = User.split(',')[1].strip() + ' ' + User.split(',')[0].strip()
+                User = User.title()
 
-            currentSemester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
-            semesterClassRoutine = {}
+                currentSemester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
+                semesterClassRoutine = {}
 
-            tasks = [process_semester(session, target) for target in targets]
+                tasks = [process_semester(session, target) for target in targets]
 
-            result = await asyncio.gather(getCurricumnData(session), getCompletedCourses(session, currentSemester), *tasks)
+                result = await asyncio.gather(getCurricumnData(session), getCompletedCourses(session, currentSemester), *tasks)
 
-            courseMap = result[0]
-            completedCourses = result[1][0]
-            currentSemesterCourses = result[1][1]
-            preRegisteredCourses = result[1][2]
+                courseMap = result[0]
+                completedCourses = result[1][0]
+                currentSemesterCourses = result[1][1]
+                preRegisteredCourses = result[1][2]
 
-            for semester in result[2:]:
-                semesterClassRoutine.update(semester)
+                for semester in result[2:]:
+                    semesterClassRoutine.update(semester)
 
-            # sort the semesters by year
-            semesterClassRoutine = dict(sorted(semesterClassRoutine.items(), key=lambda x: x[0]))
+                # sort the semesters by year
+                semesterClassRoutine = dict(sorted(semesterClassRoutine.items(), key=lambda x: x[0]))
 
-            #iterate over the gradesMap. A student can take a course after completing the prerequisites. And also if he/she has taken the course before, he must have D grade
-            unlockedCourses = {}
-            for courseCode, course in completedCourses.items():
-                #if student has taken the course before and has D grade, then he/she can take the course again
-                if course['grade'] == 'D':
-                    unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': courseMap[courseCode]['credit'], 'prerequisites': courseMap[courseCode]['prerequisites'], 'retake': True}
+                #iterate over the gradesMap. A student can take a course after completing the prerequisites. And also if he/she has taken the course before, he must have D grade
+                unlockedCourses = {}
+                for courseCode, course in completedCourses.items():
+                    #if student has taken the course before and has D grade, then he/she can take the course again
+                    if course['grade'] == 'D':
+                        unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': courseMap[courseCode]['credit'], 'prerequisites': courseMap[courseCode]['prerequisites'], 'retake': True}
 
 
-            for courseCode, course in courseMap.items():
-                    
-                    if courseCode in completedCourses:
-                        completedCourses[courseCode]['credit'] = course['credit']
-                        continue
-                    # if course code has '#' or '*' then skip
-                    if '#' in courseCode or '*' in courseCode:
-                        continue
-                    if course['course_name'] == 'INTERNSHIP':
-                        continue
-                    #if the course is already unlocked, then skip it
-                    if courseCode in unlockedCourses:
-                        continue
-                    #if the course is in the current semester, but has not been dropped, then skip it
-                    if courseCode in currentSemesterCourses and currentSemesterCourses[courseCode]['grade'] not in ['W', 'I']:
-                        continue
-                    #if the course is in the pre-registered courses, then add it to the unlocked courses
-                    if courseCode in preRegisteredCourses:
-                        unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
-                        continue
-        
-                    prerequisites = course['prerequisites']
-                    #if the course has no prerequisites, then it is unlocked
-                    if len(prerequisites) == 0:
-                        unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
-                        continue
-                    #iterate over the prerequisites. If the student has taken every prerequisite, then the course is unlocked
-                    prerequisitesMet = True
-                    for prerequisite in prerequisites:
-                        if prerequisite not in completedCourses and prerequisite not in currentSemesterCourses:
-                            prerequisitesMet = False
-                            break
-                    if prerequisitesMet:
-                        unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+                for courseCode, course in courseMap.items():
+                        
+                        if courseCode in completedCourses:
+                            completedCourses[courseCode]['credit'] = course['credit']
+                            continue
+                        # if course code has '#' or '*' then skip
+                        if '#' in courseCode or '*' in courseCode:
+                            continue
+                        if course['course_name'] == 'INTERNSHIP':
+                            continue
+                        #if the course is already unlocked, then skip it
+                        if courseCode in unlockedCourses:
+                            continue
+                        #if the course is in the current semester, but has not been dropped, then skip it
+                        if courseCode in currentSemesterCourses and currentSemesterCourses[courseCode]['grade'] not in ['W', 'I']:
+                            continue
+                        #if the course is in the pre-registered courses, then add it to the unlocked courses
+                        if courseCode in preRegisteredCourses:
+                            unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+                            continue
+            
+                        prerequisites = course['prerequisites']
+                        #if the course has no prerequisites, then it is unlocked
+                        if len(prerequisites) == 0:
+                            unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+                            continue
+                        #iterate over the prerequisites. If the student has taken every prerequisite, then the course is unlocked
+                        prerequisitesMet = True
+                        for prerequisite in prerequisites:
+                            if prerequisite not in completedCourses and prerequisite not in currentSemesterCourses:
+                                prerequisitesMet = False
+                                break
+                        if prerequisitesMet:
+                            unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
                         
         print('Sending response...')
         return {'success': True, 'message': 'Success', 'result': {'semesterClassRoutine': semesterClassRoutine, 'unlockedCourses': unlockedCourses, 'completedCourses': completedCourses, 'currentSemester': currentSemester, 'user': User}}
