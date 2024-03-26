@@ -267,6 +267,10 @@ def forward_request():
             print('Login failed')
             return flask.Response(json.dumps({'success': False, 'message': 'Invalid username or password'}), status=401, mimetype='application/json')
 
+        if 'Student/Tpe/Start' in response.url:
+            print('Evaluation pending')
+            return flask.Response(json.dumps({'success': False, 'message': 'TPE Evaluation pending'}), status=401, mimetype='application/json')
+
         print('Login successful')
 
         response = session.get('https://portal.aiub.edu/Student')
