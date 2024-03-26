@@ -269,7 +269,7 @@ def forward_request():
 
         if 'Student/Tpe/Start' in response.url:
             print('Evaluation pending')
-            return flask.Response(json.dumps({'success': False, 'message': 'TPE Evaluation pending'}), status=401, mimetype='application/json')
+            return flask.Response(json.dumps({'success': False, 'message': 'TPE Evaluation pending on portal'}), status=401, mimetype='application/json')
 
         print('Login successful')
 

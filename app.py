@@ -81,6 +81,11 @@ async def forward_request(UserName: Annotated[str, Form(...)], Password: Annotat
 
             if 'https://portal.aiub.edu/Student' not in str(resp.url):
                 return {'success': False, 'message': 'Invalid username or password'}
+            
+            if 'Student/Tpe/Start' in str(resp.url):
+                print('Evaluation pending')
+                #return flask.Response(json.dumps({'success': False, 'message': 'TPE Evaluation pending on portal'}), status=401, mimetype='application/json')
+                return {'success': False, 'message': 'TPE Evaluation pending on portal'}
 
             print('Login successful')
 
