@@ -63,7 +63,7 @@ emojis = {
 async def home():
     #return a random emoji
     random_emoji = random.choice(list(emojis))
-    return {'Client': client_url, 'message': random_emoji}
+    return {'Client': client_url, 'message': f'Version 2: {random_emoji}'}
 
 
 
