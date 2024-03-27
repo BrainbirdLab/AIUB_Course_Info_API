@@ -1,27 +1,42 @@
-import asyncio
-
-async def printList(i):
-    await asyncio.sleep(1)
-    print(i)
-
-async def task1():
-    print("Begin task1")
-    tasks = [printList(i) for i in range(10)]
-    await asyncio.gather(*tasks)
-    print("End task1")
 
 
-async def task2():
-    print("Begin task2")
-    await asyncio.sleep(4)
-    print("End task2")
+courses = {
+    "MIS4012": {
+        "course_name": "E-COMMERCE, E-GOVERNANCE & E-SERIES",
+        "credit": 3,
+        "prerequisites": [
+            "CSC3215"
+        ]
+    },
+    "EEE3103": {
+        "course_name": "DIGITAL SIGNAL PROCESSING",
+        "credit": 3,
+        "prerequisites": [
+            "EEE2213"
+        ]
+    },
+    "EEE4217": {
+        "course_name": "VLSI CIRCUIT DESIGN",
+        "credit": 3,
+        "prerequisites": [
+            "EEE4241",
+            "EEE4242"
+        ]
+    }
+}
 
+completed = {
+    "EEE3102": {
+        "grade": "A"
+    },
+    "EEE2213": {
+        "grade": "A"
+    },
+    "EEE4241": {
+        "grade": "A"
+    },
+}
 
-async def main():
-    print("Begin main")
-    task1_ = asyncio.create_task(task1())
-    task2_ = asyncio.create_task(task2())
-    await asyncio.gather(task1_, task2_)
-    print("End main")
+print("EEE4241" in completed)
 
-asyncio.run(main())
+#if all of EEE4217 prerequisites meets the completed courses
