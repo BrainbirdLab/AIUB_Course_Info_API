@@ -94,7 +94,12 @@ async def forward_request(UserName: Annotated[str, Form(...)], Password: Annotat
                 soup = BeautifulSoup(await res.text(), 'html.parser')
                 targets = soup.select("#SemesterDropDown > option")
                 User = soup.select_one('.navbar-link').text
-                User = User.split(',')[1].strip() + ' ' + User.split(',')[0].strip()
+                # User = User.split(',')[1].strip() + ' ' + User.split(',')[0].strip()
+                # if user has , in his name, then split it by , and then reverse it
+                if ',' in User:
+                    User = User.split(',')
+                    User = User[1].strip() + ' ' + User[0].strip()
+
                 User = User.title()
 
                 currentSemester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
