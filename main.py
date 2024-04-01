@@ -148,7 +148,7 @@ async def forward_request(request: Request):
 
         # Need to get more data like completed courses, credits_completed, credits_remaining, course_completed_count
 
-        result = {'semesterClassRoutine': semesterClassRoutine, 'unlockedCourses': unlockedCourses, 'completedCourses': completedCourses, 'currentSemester': currentSemester, 'user': User, 'curriculumncourses': courseMap}
+        result = {'semesterClassRoutine': semesterClassRoutine, 'unlockedCourses': unlockedCourses, 'completedCourses': completedCourses, 'preregisteredCourses': preRegisteredCourses, 'currentSemester': currentSemester, 'user': User, 'curriculumncourses': courseMap}
 
         print('Sending response...')
 
