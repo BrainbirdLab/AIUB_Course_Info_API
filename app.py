@@ -164,7 +164,7 @@ async def forward_request(UserName: Annotated[str, Form(...)], Password: Annotat
                             unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
                         
         print('Sending response...')
-        return {'success': True, 'message': 'Success', 'result': { 'allCourses': courseMap, 'semesterClassRoutine': semesterClassRoutine, 'unlockedCourses': unlockedCourses, 'completedCourses': completedCourses, 'preregisteredCourses': preRegisteredCourses, 'currentSemester': currentSemester, 'user': User}}
+        return {'success': True, 'message': 'Success', 'result': { 'semesterClassRoutine': semesterClassRoutine, 'unlockedCourses': unlockedCourses, 'completedCourses': completedCourses, 'preregisteredCourses': preRegisteredCourses, 'currentSemester': currentSemester, 'user': User}}
 
 
 
