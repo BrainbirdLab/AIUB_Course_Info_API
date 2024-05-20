@@ -142,7 +142,7 @@ async def forward_request(UserName: Annotated[str, Form(...)], Password: Annotat
                         if courseCode in unlockedCourses:
                             continue
                         #if the course is in the current semester, but has not been dropped, then skip it
-                        if (courseCode in currentSemesterCourses and course["course_name"] == currentSemesterCourses[courseCode]["course_name"]) and currentSemesterCourses[courseCode]['grade'] not in ['W', 'I']:
+                        if (courseCode in currentSemesterCourses and course["course_name"] == currentSemesterCourses[courseCode]["course_name"]) and currentSemesterCourses[courseCode]['grade'] not in ['W', 'I', 'UW']:
                             continue
                         #if the course is in the pre-registered courses, then add it to the unlocked courses
                         if courseCode in preRegisteredCourses:
