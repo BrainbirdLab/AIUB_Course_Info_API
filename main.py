@@ -22,6 +22,8 @@ client_url = os.environ.get('CLIENT_URL')
 
 print(f'Client url: {client_url}')
 
+default_parser = 'html.parser'
+
 # Allow CORS to client_url
 app.add_middleware(
     CORSMiddleware,
@@ -31,28 +33,30 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
-def parse_time(timeString):
+def parse_time(time_string: str):
     try:
-        match = re.findall(r'\d{1,2}:\d{1,2}(?:\s?[ap]m|\s?[AP]M)?', timeString)
+        match = re.findall(r'\d{1,2}:\d{1,2}(?:\s?[ap]m|\s?[AP]M)?', time_string)
         day_map = {'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'}
-        class_type = re.search(r'\((.*?)\)', timeString).group(1)
-        day = day_map[re.search(r'(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', timeString).group()]
-        room = re.search(r'Room: (.*)', timeString).group(1)
+        class_type = re.search(r'\((.*?)\)', time_string).group(1)
+        day = day_map[re.search(r'(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', time_string).group()]
+        room = re.search(r'Room: (.*)', time_string).group(1)
         start_time, end_time = match[0], match[1]
         start_time_obj = ''
         end_time_obj = ''
-        # If time contains am/pm or AM/PM
+        #if time contains am/pm or AM/PM
+        AM_TIME_FORMAT = '%I:%M'
+        PM_TIME_FORMAT = AM_TIME_FORMAT + ' %p'
         if "am" in start_time.lower() or "pm" in start_time.lower():
-            start_time_obj = datetime.strptime(start_time, '%I:%M %p')
+            start_time_obj = datetime.strptime(start_time, PM_TIME_FORMAT)
         else:
-            start_time_obj = datetime.strptime(start_time, '%I:%M')
+            start_time_obj = datetime.strptime(start_time, AM_TIME_FORMAT)
         if "am" in end_time.lower() or "pm" in end_time.lower():
-            end_time_obj = datetime.strptime(end_time, '%I:%M %p')
+            end_time_obj = datetime.strptime(end_time, PM_TIME_FORMAT)
         else:
-            end_time_obj = datetime.strptime(end_time, '%I:%M')
+            end_time_obj = datetime.strptime(end_time, AM_TIME_FORMAT)
 
-        start_time_formatted = start_time_obj.strftime('%I:%M %p')
-        end_time_formatted = end_time_obj.strftime('%I:%M %p')
+        start_time_formatted = start_time_obj.strftime(PM_TIME_FORMAT)
+        end_time_formatted = end_time_obj.strftime(PM_TIME_FORMAT)
         final_time = f"{start_time_formatted} - {end_time_formatted}"
         data = {
             "type": class_type,
@@ -93,62 +97,62 @@ async def forward_request(request: Request):
         response = session.get('https://portal.aiub.edu/Student')
         cookies = session.cookies.get_dict()
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, default_parser)
         targets = soup.select("#SemesterDropDown > option")
-        User = soup.select_one('.navbar-link').text
+        user = soup.select_one('.navbar-link').text
 
-        if ',' in User:
-            User = User.split(',')
-            User = User[1].strip() + ' ' + User[0].strip()
+        if ',' in user:
+            user = user.split(',')
+            user = user[1].strip() + ' ' + user[0].strip()
 
-        User = User.title()
+        user = user.title()
 
-        currentSemester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
-        semesterClassRoutine = {} # contains all semester info
-        courseMap = {} # contains all course info
-        completedCourses = {} # contains all completed courses info
-        currentSemesterCourses = {} # contains all current semester courses info
-        unlockedCourses = {} # contains all unlocked courses info
-        preRegisteredCourses = {} # contains all pre-registered courses info
+        current_semester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
+        semester_class_routine = {} # contains all semester info
+        course_map = {} # contains all course info
+        completed_courses = {} # contains all completed courses info
+        current_semester_courses = {} # contains all current semester courses info
+        unlocked_courses = {} # contains all unlocked courses info
+        pre_registered_courses = {} # contains all pre-registered courses info
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Execute getCurricumnData concurrently
-            courseMap_future = executor.submit(getCurricumnData, cookies, session)
+            course_map_future = executor.submit(get_curricumn_data, cookies, session)
 
-            completedCoursesMap_future = executor.submit(getCompletedCourses, cookies, session, currentSemester)
+            completed_courses_map_future = executor.submit(get_completed_courses, cookies, session, current_semester)
 
             # Execute process_semester concurrently for each target
             futures = [executor.submit(process_semester, target, session, cookies) for target in targets]
                         # Wait for getCurricumnData to complete and retrieve the result
-            courseMap = courseMap_future.result()
+            course_map = course_map_future.result()
 
             # Wait for getGradeReport to complete and retrieve the result
-            completedCourses = completedCoursesMap_future.result()[0]
-            currentSemesterCourses = completedCoursesMap_future.result()[1]
-            preRegisteredCourses = completedCoursesMap_future.result()[2]
+            completed_courses = completed_courses_map_future.result()[0]
+            current_semester_courses = completed_courses_map_future.result()[1]
+            pre_registered_courses = completed_courses_map_future.result()[2]
 
             # Wait for process_semester tasks to complete and update semesters
             for future in concurrent.futures.as_completed(futures):
-                semesterClassRoutine.update(future.result())
+                semester_class_routine.update(future.result())
 
             
         # Sort the semesters by year
-        semesterClassRoutine = dict(sorted(semesterClassRoutine.items(), key=lambda x: x[0]))
+        semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
         
         print('Processing data...')
 
         # Iterate over the gradesMap. A student can take a course after completing the prerequisites. And also if he/she has taken the course before, he must have D grade
-        for courseCode, course in completedCourses.items():
+        for course_code, course in completed_courses.items():
             # If student has taken the course before and has D grade, then he/she can take the course again
             if course['grade'] == 'D':
-                unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': courseMap[courseCode]['credit'], 'prerequisites': courseMap[courseCode]['prerequisites'], 'retake': True}
+                unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course_map[course_code]['credit'], 'prerequisites': course_map[course_code]['prerequisites'], 'retake': True}
 
         # Add unlocked courses to the unlockedCourses dictionary
-        unlockedCourses = add_unlocked_courses(courseMap, completedCourses, currentSemesterCourses, preRegisteredCourses, unlockedCourses)
+        unlocked_courses = add_unlocked_courses(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses)
 
         # Need to get more data like completed courses, credits_completed, credits_remaining, course_completed_count
 
-        result = {'semesterClassRoutine': semesterClassRoutine, 'unlockedCourses': unlockedCourses, 'completedCourses': completedCourses, 'preregisteredCourses': preRegisteredCourses, 'currentSemester': currentSemester, 'user': User, 'curriculumncourses': courseMap}
+        result = {'semesterClassRoutine': semester_class_routine, 'unlockedCourses': unlocked_courses, 'completedCourses': completed_courses, 'preregisteredCourses': pre_registered_courses, 'currentSemester': current_semester, 'user': user, 'curriculumncourses': course_map}
 
         print('Sending response...')
 
@@ -159,113 +163,113 @@ async def forward_request(request: Request):
         return JSONResponse({'success': False, 'message': 'Something went wrong'}, status_code=500)
     
 
-def add_unlocked_courses(courseMap, completedCourses, currentSemesterCourses, preRegisteredCourses, unlockedCourses):
+def add_unlocked_courses(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
 
     # write currentSemesterCourses to a file
     with open('currentSemesterCourses.json', 'w') as f:
-        json.dump(currentSemesterCourses, f)
+        json.dump(current_semester_courses, f)
 
-    for courseCode, course in courseMap.items():
+    for course_code, course in course_map.items():
 
         #print(f'Processing course: {course["course_name"]}')
 
-        if courseCode in completedCourses:
-            completedCourses[courseCode]['credit'] = course['credit']
+        if course_code in completed_courses:
+            completed_courses[course_code]['credit'] = course['credit']
             continue
         # if course code has '#' or '*' then skip
-        if '#' in courseCode or '*' in courseCode:
+        if '#' in course_code or '*' in course_code:
             continue
         if course['course_name'] == 'INTERNSHIP':
             continue
         #if the course is already unlocked, then skip it
-        if courseCode in unlockedCourses:
+        if course_code in unlocked_courses:
             continue
         #if the course is in the current semester, but has not been dropped, then skip it
-        if (courseCode in currentSemesterCourses and course["course_name"] == currentSemesterCourses[courseCode]["course_name"]) and currentSemesterCourses[courseCode]['grade'] not in ['W', 'I']:
+        if (course_code in current_semester_courses and course["course_name"] == current_semester_courses[course_code]["course_name"]) and current_semester_courses[course_code]['grade'] not in ['W', 'I']:
             continue
         #if the course is in the pre-registered courses, then add it to the unlocked courses
-        if courseCode in preRegisteredCourses:
-            unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+        if course_code in pre_registered_courses:
+            unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
             continue
 
         prerequisites = course['prerequisites']
         #if the course has no prerequisites, then it is unlocked
         if len(prerequisites) == 0:
-            unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+            unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
             continue
         #iterate over the prerequisites. If the student has taken every prerequisite, then the course is unlocked
-        prerequisitesMet = True
+        pre_requisites_met = True
         for prerequisite in prerequisites:
-            if prerequisite not in completedCourses and prerequisite not in currentSemesterCourses:
-                prerequisitesMet = False
+            if prerequisite not in completed_courses and prerequisite not in current_semester_courses:
+                pre_requisites_met = False
                 break
-        if prerequisitesMet:
-            unlockedCourses[courseCode] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+        if pre_requisites_met:
+            unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
 
         #print(f'Added course: {c}')
     
-    return unlockedCourses
+    return unlocked_courses
 
 
-def getCurricumnData(cookies, session):
-    getCurricumnLink = 'https://portal.aiub.edu/Student/Curriculum'
-    response = session.get(getCurricumnLink, cookies=cookies)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    targetElements = soup.select('[curriculumid]')
-    curricumnID = []
-    for target in targetElements:
+def get_curricumn_data(cookies, session):
+    get_curricumn_link = 'https://portal.aiub.edu/Student/Curriculum'
+    response = session.get(get_curricumn_link, cookies=cookies)
+    soup = BeautifulSoup(response.text, default_parser)
+    target_elements = soup.select('[curriculumid]')
+    curricumn_id = []
+    for target in target_elements:
         # Attribute value is the curriculum id
-        curricumnID.append(target.attrs['curriculumid'])
+        curricumn_id.append(target.attrs['curriculumid'])
 
-    courseMap = {}  # Will contain the course code as key and {coursename, prerequisit[]} as value
+    course_map = {}  # Will contain the course code as key and {coursename, prerequisit[]} as value
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Execute process_curriculum concurrently
-        futures = [executor.submit(process_curriculum, ID, session, cookies) for ID in curricumnID]
+        futures = [executor.submit(process_curriculum, ID, session, cookies) for ID in curricumn_id]
 
         # Wait for process_curriculum tasks to complete and update courseMap
         for future in concurrent.futures.as_completed(futures):
-            courseMap.update(future.result())
+            course_map.update(future.result())
 
-    return courseMap
+    return course_map
 
-def process_curriculum(ID: str, session, cookies):
+def process_curriculum(id: str, session, cookies):
     # Request the getCurricumnLink?IDd=curriculumId
-    courseMap = {}
-    response = session.get(f'https://portal.aiub.edu/Common/Curriculum?ID={ID}', cookies=cookies)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    course_map = {}
+    response = session.get(f'https://portal.aiub.edu/Common/Curriculum?ID={id}', cookies=cookies)
+    soup = BeautifulSoup(response.text, default_parser)
     table = soup.select('.table-bordered tr:not(:first-child)')
 
     for course in table:
-        courseCode = course.select_one('td:nth-child(1)').text.strip()
-        courseName = course.select_one('td:nth-child(2)').text.strip()
+        course_code = course.select_one('td:nth-child(1)').text.strip()
+        course_name = course.select_one('td:nth-child(2)').text.strip()
         credit = course.select_one('td:nth-child(3)').text.strip()
         credit = sorted([int(c) for c in credit.split(' ')], reverse=True)[0]
         prerequisites = [li.text.strip() for li in course.select('td:nth-child(4) li')]
-        courseMap[courseCode] = {'course_name': courseName, 'credit': credit, 'prerequisites': prerequisites}
+        course_map[course_code] = {'course_name': course_name, 'credit': credit, 'prerequisites': prerequisites}
 
-    return courseMap
+    return course_map
 
-def getCompletedCourses(cookies, session, currentSemester: str): 
+def get_completed_courses(cookies, session, current_semester: str): 
     url = 'https://portal.aiub.edu/Student/GradeReport/ByCurriculum'
     response = session.get(url, cookies=cookies)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    soup = BeautifulSoup(response.text, default_parser)
     rows = soup.select('table:not(:first-child) tr:not(:first-child):has(td:nth-child(3):not(:empty))')
 
-    completedCourses = {}
-    currentSemesterCourses = {}
-    preRegisteredCourses = {}
+    completed_courses = {}
+    current_semester_courses = {}
+    pre_registered_courses = {}
 
     for row in rows:
-        courseCode = row.select_one('td:nth-child(1)').text.strip()
-        courseName = row.select_one('td:nth-child(2)').text.strip()
+        course_code = row.select_one('td:nth-child(1)').text.strip()
+        course_name = row.select_one('td:nth-child(2)').text.strip()
         results = row.select_one('td:nth-child(3)').text.strip() 
 
         # Use regular expressions to extract the last result
         matches = re.findall(r'\(([^)]+)\)\s*\[([^\]]+)\]', results)
 
         # Check if there are any matches
-        if matches is not None and len(matches) > 0:
+        if  len(matches) > 0:
             # Get the last match
             last_result = matches[-1]
             # Extract grade and semester from the last result
@@ -276,14 +280,14 @@ def getCompletedCourses(cookies, session, currentSemester: str):
             continue
 
         if grade in ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F']:
-            completedCourses[courseCode] = {'course_name': courseName, 'grade': grade}
+            completed_courses[course_code] = {'course_name': course_name, 'grade': grade}
         elif grade == '-':
-            if semester == currentSemester:
-                currentSemesterCourses[courseCode] = {'course_name': courseName, 'grade': grade}
+            if semester == current_semester:
+                current_semester_courses[course_code] = {'course_name': course_name, 'grade': grade}
             else:
-                preRegisteredCourses[courseCode] = {'course_name': courseName, 'grade': grade}
+                pre_registered_courses[course_code] = {'course_name': course_name, 'grade': grade}
         
-    return [completedCourses, currentSemesterCourses, preRegisteredCourses]
+    return [completed_courses, current_semester_courses, pre_registered_courses]
 
 
 def process_semester(target, session, cookies):
@@ -293,31 +297,31 @@ def process_semester(target, session, cookies):
         try:
             rq_url = 'https://portal.aiub.edu/Student/Registration?q=' + match.group(1)
             response = session.get(rq_url, cookies=cookies)
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, default_parser)
             table = soup.select("table")
-            rawCourseElements = table[1].select("td:first-child")
-            coursesObj = {}
-            for course in rawCourseElements:
+            raw_course_elements = table[1].select("td:first-child")
+            courses_obj = {}
+            for course in raw_course_elements:
                 if course.text != '':
-                    courseName = course.select_one("a").text
-                    parsedCourse = getCourseDetails(courseName)
-                    courseTimes = course.select("div > span")
+                    course_name = course.select_one("a").text
+                    parsed_course = get_course_details(course_name)
+                    course_times = course.select("div > span")
                     credit = course.findNext('td').text.strip()
                     credit = sorted([int(c.strip()) for c in credit.split('-')], reverse=True)[0]
-                    for time in courseTimes:
+                    for time in course_times:
                         if 'Time' not in time.text:
                             continue
-                        parsedTime = parseTime(time.text)
-                        if coursesObj.get(parsedTime['day']) is None:
-                            coursesObj[parsedTime['day']] = {}
-                        coursesObj[parsedTime['day']][parsedTime['time']] = {'course_name': parsedCourse['course_name'], 'class_id': parsedCourse['class_id'], 'credit': credit, 'section': parsedCourse['section'], 'type': parsedTime['type'], 'room': parsedTime['room']}
-            semesters[target.text] = coursesObj
+                        parsed_time = parse_time(time.text)
+                        if courses_obj.get(parsed_time['day']) is None:
+                            courses_obj[parsed_time['day']] = {}
+                        courses_obj[parsed_time['day']][parsed_time['time']] = {'course_name': parsed_course['course_name'], 'class_id': parsed_course['class_id'], 'credit': credit, 'section': parsed_course['section'], 'type': parsed_time['type'], 'room': parsed_time['room']}
+            semesters[target.text] = courses_obj
         except Exception as e:
             print('Error in process_semester: ', e)
     return semesters
 
 
-def getCourseDetails(course):
+def get_course_details(course):
     match = re.match(r"^(\d+)-(.+?)\s+\[([A-Z0-9]+)\](?:\s+\[([A-Z0-9]+)\])?$", course)
     try:
         if match:
@@ -331,41 +335,6 @@ def getCourseDetails(course):
     except IndexError:
         print("Course not found in the string:", course)
         return {"class_id": "", "course_name": "", "section": ""}
-
-
-def parseTime(timeString):
-    try:
-        match = re.findall(r'\d{1,2}:\d{1,2}(?:\s?[ap]m|\s?[AP]M)?', timeString)
-        dayMap = {'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'}
-        class_type = re.search(r'\((.*?)\)', timeString).group(1)
-        day = dayMap[re.search(r'(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', timeString).group()]
-        room = re.search(r'Room: (.*)', timeString).group(1)
-        start_time, end_time = match[0], match[1]
-        start_time_obj = ''
-        end_time_obj = ''
-        #if time contains am/pm or AM/PM
-        if "am" in start_time.lower() or "pm" in start_time.lower():
-            start_time_obj = datetime.strptime(start_time, '%I:%M %p')
-        else:
-            start_time_obj = datetime.strptime(start_time, '%I:%M')
-        if "am" in end_time.lower() or "pm" in end_time.lower():
-            end_time_obj = datetime.strptime(end_time, '%I:%M %p')
-        else:
-            end_time_obj = datetime.strptime(end_time, '%I:%M')
-
-        start_time_formatted = start_time_obj.strftime('%I:%M %p')
-        end_time_formatted = end_time_obj.strftime('%I:%M %p')
-        final_time = f"{start_time_formatted} - {end_time_formatted}"
-        data = {
-            "type": class_type,
-            "time": final_time,
-            "day": day,
-            "room": room
-        }
-        return data
-    except IndexError:
-        print("Time not found in the string.")
-
 
 
 if __name__ == '__main__':
