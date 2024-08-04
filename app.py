@@ -74,7 +74,11 @@ async def forward_request(user_name: Annotated[str, Form(...)], password: Annota
 
     url = 'https://portal.aiub.edu'
 
-    async with aiohttp.ClientSession() as session:
+    #async with aiohttp.ClientSession() as session:
+
+    session = aiohttp.ClientSession()
+
+    try:
         async with session.post(url, data={'UserName': user_name, 'Password': password}) as resp:
             if resp.status != 200:
                 return {'success': False, 'message': 'Error in request'}
@@ -125,44 +129,67 @@ async def forward_request(user_name: Annotated[str, Form(...)], password: Annota
                     if course['grade'] == 'D':
                         unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course_map[course_code]['credit'], 'prerequisites': course_map[course_code]['prerequisites'], 'retake': True}
 
+                completed_courses, unlocked_courses = post_process(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses)
 
-                for course_code, course in course_map.items():
                         
-                        if course_code in completed_courses:
-                            completed_courses[course_code]['credit'] = course['credit']
-                            continue
-                        # if course code has '#' or '*' then skip
-                        if '#' in course_code or '*' in course_code:
-                            continue
-                        if course['course_name'] == 'INTERNSHIP':
-                            continue
-                        #if the course is already unlocked, then skip it
-                        if course_code in unlocked_courses:
-                            continue
-                        #if the course is in the current semester, but has not been dropped, then skip it
-                        if (course_code in current_semester_courses and course["course_name"] == current_semester_courses[course_code]["course_name"]) and current_semester_courses[course_code]['grade'] not in ['W', 'I', 'UW']:
-                            continue
-                        #if the course is in the pre-registered courses, then add it to the unlocked courses
-                        if course_code in pre_registered_courses:
-                            unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
-                            continue
-            
-                        prerequisites = course['prerequisites']
-                        #if the course has no prerequisites, then it is unlocked
-                        if len(prerequisites) == 0:
-                            unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
-                            continue
-                        #iterate over the prerequisites. If the student has taken every prerequisite, then the course is unlocked
-                        pre_requisites_met = True
-                        for prerequisite in prerequisites:
-                            if prerequisite not in completed_courses and prerequisite not in current_semester_courses:
-                                pre_requisites_met = False
-                                break
-                        if pre_requisites_met:
-                            unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
-                        
-        print('Sending response...')
-        return {'success': True, 'message': 'Success', 'result': { 'semesterClassRoutine': semester_class_routine, 'unlockedCourses': unlocked_courses, 'completedCourses': completed_courses, 'preregisteredCourses': pre_registered_courses, 'currentSemester': current_semester, 'user': user}}
+            print('Sending response...')
+            return {'success': True, 'message': 'Success', 'result': { 'semesterClassRoutine': semester_class_routine, 'unlockedCourses': unlocked_courses, 'completedCourses': completed_courses, 'preregisteredCourses': pre_registered_courses, 'currentSemester': current_semester, 'user': user}}
+    except Exception as e:
+        print(e)
+        return {'success': False, 'message': 'Error in request'}
+    finally:
+        await session.close()
+
+def is_course_code_skippable(course_code: str) -> bool:
+    return '#' in course_code or '*' in course_code
+
+def is_in_current_semester(course_code: str, course: dict, current_semester_courses: dict) -> bool:
+    return (
+        course_code in current_semester_courses and
+        course["course_name"] == current_semester_courses[course_code]["course_name"] and
+        current_semester_courses[course_code]['grade'] not in ['W', 'I', 'UW']
+    )
+
+def is_course_unlocked(prerequisites: list, completed_courses: dict, current_semester_courses: dict) -> bool:
+    if not prerequisites:
+        return True
+    return all(
+        prerequisite in completed_courses or prerequisite in current_semester_courses
+        for prerequisite in prerequisites
+    )
+
+def post_process(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
+    for course_code, course in course_map.items():
+        if course_code in completed_courses:
+            completed_courses[course_code]['credit'] = course['credit']
+            continue
+        if is_course_code_skippable(course_code):
+            continue
+        if course['course_name'] == 'INTERNSHIP':
+            continue
+        if course_code in unlocked_courses:
+            continue
+        if is_in_current_semester(course_code, course, current_semester_courses):
+            continue
+        if course_code in pre_registered_courses:
+            unlocked_courses[course_code] = {
+                'course_name': course['course_name'],
+                'credit': course['credit'],
+                'prerequisites': course['prerequisites'],
+                'retake': False
+            }
+            continue
+        
+        if is_course_unlocked(course['prerequisites'], completed_courses, current_semester_courses):
+            unlocked_courses[course_code] = {
+                'course_name': course['course_name'],
+                'credit': course['credit'],
+                'prerequisites': course['prerequisites'],
+                'retake': False
+            }
+
+    return completed_courses, unlocked_courses
+
 
 
 
@@ -259,43 +286,45 @@ async def process_semester(session: aiohttp.ClientSession, target: Tag):
     semester = {}
     match = re.search(r'q=(.*)', target.attrs['value'])
     
-    if match is not None and len(match.groups()) > 0:
-        rq_url = 'https://portal.aiub.edu/Student/Registration?q=' + match.group(1)
+    if match is not None and len(match.groups()) < 1:
+        return
+    
+    rq_url = 'https://portal.aiub.edu/Student/Registration?q=' + match.group(1)
 
-        async with session.get(rq_url) as response:
-            soup = BeautifulSoup(await response.text(), default_parser)
-            raw_course_elements = soup.select("table")[1].select("td:first-child")
+    async with session.get(rq_url) as response:
+        soup = BeautifulSoup(await response.text(), default_parser)
+        raw_course_elements = soup.select("table")[1].select("td:first-child")
 
-            if len(raw_course_elements) == 0:
-                return semester
+        if len(raw_course_elements) == 0:
+            return semester
 
-            courses_obj = {}
-            for course in raw_course_elements:
-                if course.text != '':
-                    course_name = course.select_one("a").text
-                    parsed_course = get_course_details(course_name)
-                    course_times = course.select("div > span")
-                    credit = max(int(c.strip()) for c in course.find_next('td').text.strip().split('-'))
+        courses_obj = {}
+        for course in raw_course_elements:
+            if course.text != '':
+                course_name = course.select_one("a").text
+                parsed_course = get_course_details(course_name)
+                course_times = course.select("div > span")
+                credit = max(int(c.strip()) for c in course.find_next('td').text.strip().split('-'))
 
-                    course_data = [
-                        parse_time(time.text) for time in course_times if 'Time' in time.text
-                    ]
+                course_data = [
+                    parse_time(time.text) for time in course_times if 'Time' in time.text
+                ]
 
-                    for parsed_time in course_data:
-                        day = parsed_time['day']
-                        if courses_obj.get(day) is None:
-                            courses_obj[day] = {}
+                for parsed_time in course_data:
+                    day = parsed_time['day']
+                    if courses_obj.get(day) is None:
+                        courses_obj[day] = {}
 
-                        courses_obj[day][parsed_time['time']] = {
-                            'course_name': parsed_course['course_name'],
-                            'class_id': parsed_course['class_id'],
-                            'credit': credit,
-                            'section': parsed_course['section'],
-                            'type': parsed_time['type'],
-                            'room': parsed_time['room']
-                        }
+                    courses_obj[day][parsed_time['time']] = {
+                        'course_name': parsed_course['course_name'],
+                        'class_id': parsed_course['class_id'],
+                        'credit': credit,
+                        'section': parsed_course['section'],
+                        'type': parsed_time['type'],
+                        'room': parsed_time['room']
+                    }
 
-            semester[target.text] = courses_obj
+        semester[target.text] = courses_obj
 
     return semester
 
