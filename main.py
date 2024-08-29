@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import requests
@@ -8,7 +8,6 @@ import os
 import re
 import concurrent.futures
 import json
-import random
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -376,8 +375,3 @@ def get_course_details(course):
     except IndexError:
         print("Course not found in the string:", course)
         return {"class_id": "", "course_name": "", "section": ""}
-
-
-if __name__ == '__main__':
-    import uvicorn
-    uvicorn.run(app, port=PORT)

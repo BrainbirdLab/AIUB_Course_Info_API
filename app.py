@@ -68,7 +68,7 @@ async def home():
 
 
 @app.post('/')
-async def forward_request(user_name: Annotated[str, Form(...)], password: Annotated[str, Form(...)]):
+async def forward_request(user_name: str = Form(...), password: str = Form(...)):
 
     print('Processing request...')
 

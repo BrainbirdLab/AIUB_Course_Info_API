@@ -4,3 +4,4 @@ aiohttp
 uvicorn
 python-dotenv
 python-multipart
+typing-extensions
