@@ -1,7 +1,7 @@
 bs4
+requests
 fastapi
 aiohttp
 uvicorn
 python-dotenv
 python-multipart
-typing-extensions

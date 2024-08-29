@@ -1,8 +1,8 @@
 import aiohttp
 import asyncio
 from fastapi import FastAPI, Form
-from typing_extensions import Annotated
 from datetime import datetime
+from typing_extensions import Annotated
 from bs4 import BeautifulSoup, Tag
 from datetime import datetime
 import os
@@ -68,77 +68,74 @@ async def home():
 
 
 @app.post('/')
-async def forward_request(user_name: str = Form(...), password: str = Form(...)):
+async def forward_request(user_name: str = Annotated[str, Form(...)], password: str = Annotated[str, Form(...)]):
 
     print('Processing request...')
 
     url = 'https://portal.aiub.edu'
 
-    #async with aiohttp.ClientSession() as session:
-
-    session = aiohttp.ClientSession()
-
-    try:
-        async with session.post(url, data={'UserName': user_name, 'Password': password}) as resp:
-            if resp.status != 200:
-                return {'success': False, 'message': 'Error in request'}
-
-            if 'https://portal.aiub.edu/Student' not in str(resp.url):
-                return {'success': False, 'message': 'Invalid username or password'}
-            
-            if 'Student/Tpe/Start' in str(resp.url):
-                print('Evaluation pending')
-                return {'success': False, 'message': 'TPE Evaluation pending on portal'}
-
-            print('Login successful')
-
-            async with session.get('https://portal.aiub.edu/Student') as res:
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(url, data={'UserName': user_name, 'Password': password}) as resp:
+                if resp.status != 200:
+                    return {'success': False, 'message': 'Error in request'}
                 
-                soup = BeautifulSoup(await res.text(), default_parser)
-                targets = soup.select("#SemesterDropDown > option")
-                user = soup.select_one('.navbar-link').text
-                # if user has , in his name, then split it by , and then reverse it
-                if ',' in user:
-                    user = user.split(',')
-                    user = user[1].strip() + ' ' + user[0].strip()
+                print('Checking response...')
 
-                user = user.title()
+                if 'https://portal.aiub.edu/Student' not in str(resp.url):
+                    return {'success': False, 'message': 'Invalid username or password - ' + str(resp.url)}
+                
+                if 'Student/Tpe/Start' in str(resp.url):
+                    print('Evaluation pending')
+                    return {'success': False, 'message': 'TPE Evaluation pending on portal'}
 
-                current_semester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
-                semester_class_routine = {}
+                print('Login successful')
 
-                tasks = [process_semester(session, target) for target in targets]
+                async with session.get('https://portal.aiub.edu/Student') as res:
+                    
+                    soup = BeautifulSoup(await res.text(), default_parser)
+                    targets = soup.select("#SemesterDropDown > option")
+                    user = soup.select_one('.navbar-link').text
+                    # if user has , in his name, then split it by , and then reverse it
+                    if ',' in user:
+                        user = user.split(',')
+                        user = user[1].strip() + ' ' + user[0].strip()
 
-                result = await asyncio.gather(get_curricumn_data(session), get_completed_courses(session, current_semester), *tasks)
+                    user = user.title()
 
-                course_map = result[0]
-                completed_courses = result[1][0]
-                current_semester_courses = result[1][1]
-                pre_registered_courses = result[1][2]
+                    current_semester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
+                    semester_class_routine = {}
 
-                for semester in result[2:]:
-                    semester_class_routine.update(semester)
+                    tasks = [process_semester(session, target) for target in targets]
 
-                # sort the semesters by year
-                semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
+                    result = await asyncio.gather(get_curricumn_data(session), get_completed_courses(session, current_semester), *tasks)
 
-                #iterate over the gradesMap. A student can take a course after completing the prerequisites. And also if he/she has taken the course before, he must have D grade
-                unlocked_courses = {}
-                for course_code, course in completed_courses.items():
-                    #if student has taken the course before and has D grade, then he/she can take the course again
-                    if course['grade'] == 'D':
-                        unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course_map[course_code]['credit'], 'prerequisites': course_map[course_code]['prerequisites'], 'retake': True}
+                    course_map = result[0]
+                    completed_courses = result[1][0]
+                    current_semester_courses = result[1][1]
+                    pre_registered_courses = result[1][2]
 
-                completed_courses, unlocked_courses = post_process(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses)
+                    for semester in result[2:]:
+                        semester_class_routine.update(semester)
 
-                        
-            print('Sending response...')
-            return {'success': True, 'message': 'Success', 'result': { 'semesterClassRoutine': semester_class_routine, 'unlockedCourses': unlocked_courses, 'completedCourses': completed_courses, 'preregisteredCourses': pre_registered_courses, 'currentSemester': current_semester, 'user': user}}
-    except Exception as e:
-        print(e)
-        return {'success': False, 'message': 'Error in request'}
-    finally:
-        await session.close()
+                    # sort the semesters by year
+                    semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
+
+                    #iterate over the gradesMap. A student can take a course after completing the prerequisites. And also if he/she has taken the course before, he must have D grade
+                    unlocked_courses = {}
+                    for course_code, course in completed_courses.items():
+                        #if student has taken the course before and has D grade, then he/she can take the course again
+                        if course['grade'] == 'D':
+                            unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course_map[course_code]['credit'], 'prerequisites': course_map[course_code]['prerequisites'], 'retake': True}
+
+                    completed_courses, unlocked_courses = post_process(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses)
+
+                            
+                print('Sending response...')
+                return {'success': True, 'message': 'Success', 'result': { 'semesterClassRoutine': semester_class_routine, 'unlockedCourses': unlocked_courses, 'completedCourses': completed_courses, 'preregisteredCourses': pre_registered_courses, 'currentSemester': current_semester, 'user': user}}
+        except Exception as e:
+            print(e)
+            return {'success': False, 'message': 'Error in request'}
 
 def is_course_code_skippable(course_code: str) -> bool:
     return '#' in course_code or '*' in course_code
