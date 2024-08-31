@@ -1,3 +1,5 @@
+# deprecated version of the app
+
 import aiohttp
 import asyncio
 from fastapi import FastAPI, Form

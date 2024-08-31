@@ -1,3 +1,4 @@
 test.py
 .env
 .json
+__pycache__

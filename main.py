@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import requests
@@ -8,6 +8,7 @@ import os
 import re
 import concurrent.futures
 import json
+import random
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -162,70 +163,43 @@ async def forward_request(request: Request):
         return JSONResponse({'success': False, 'message': 'Something went wrong'}, status_code=500)
     
 
-def write_current_semester_courses(current_semester_courses):
-    with open('currentSemesterCourses.json', 'w') as f:
-        json.dump(current_semester_courses, f)
-
-def is_course_code_skippable(course_code: str) -> bool:
-    return '#' in course_code or '*' in course_code
-
-def is_course_in_current_semester(course_code: str, course: dict, current_semester_courses: dict) -> bool:
-    return (
-        course_code in current_semester_courses and
-        course["course_name"] == current_semester_courses[course_code]["course_name"] and
-        current_semester_courses[course_code]['grade'] not in ['W', 'I']
-    )
-
-def add_course_to_unlocked(course_code: str, course: dict, unlocked_courses: dict, retake: bool = False):
-    unlocked_courses[course_code] = {
-        'course_name': course['course_name'],
-        'credit': course['credit'],
-        'prerequisites': course['prerequisites'],
-        'retake': retake
-    }
-
-def is_prerequisites_met(prerequisites: list, completed_courses: dict, current_semester_courses: dict) -> bool:
-    return all(
-        prerequisite in completed_courses or prerequisite in current_semester_courses
-        for prerequisite in prerequisites
-    )
-
-
-def write_current_semester_courses(current_semester_courses):
-    with open('currentSemesterCourses.json', 'w') as f:
-        json.dump(current_semester_courses, f)
-
-def is_course_eligible(course_code: str, course: dict, completed_courses: dict, current_semester_courses: dict, pre_registered_courses: dict, unlocked_courses: dict) -> bool:
-    if course_code in completed_courses:
-        completed_courses[course_code]['credit'] = course['credit']
-        return False
-    if is_course_code_skippable(course_code):
-        return False
-    if course['course_name'] == 'INTERNSHIP':
-        return False
-    if course_code in unlocked_courses:
-        return False
-    if is_course_in_current_semester(course_code, course, current_semester_courses):
-        return False
-    if course_code in pre_registered_courses:
-        add_course_to_unlocked(course_code, course, unlocked_courses, retake=False)
-        return False
-    return True
-
-def process_course(course_code: str, course: dict, completed_courses: dict, current_semester_courses: dict, unlocked_courses: dict):
-    prerequisites = course['prerequisites']
-    if not prerequisites or is_prerequisites_met(prerequisites, completed_courses, current_semester_courses):
-        add_course_to_unlocked(course_code, course, unlocked_courses, retake=False)
-
 def add_unlocked_courses(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
-    write_current_semester_courses(current_semester_courses)
+    # write currentSemesterCourses to a file
+    with open('currentSemesterCourses.json', 'w') as f:
+        json.dump(current_semester_courses, f)
 
     for course_code, course in course_map.items():
-        if is_course_eligible(course_code, course, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
-            process_course(course_code, course, completed_courses, current_semester_courses, unlocked_courses)
+        if should_skip_course(course_code, course, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
+            continue
+
+        prerequisites = course['prerequisites']
+        if len(prerequisites) == 0 or are_prerequisites_met(prerequisites, completed_courses, current_semester_courses):
+            unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
 
     return unlocked_courses
 
+def should_skip_course(course_code, course, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
+    if course_code in completed_courses:
+        completed_courses[course_code]['credit'] = course['credit']
+        return True
+    if '#' in course_code or '*' in course_code:
+        return True
+    if course['course_name'] == 'INTERNSHIP':
+        return True
+    if course_code in unlocked_courses:
+        return True
+    if (course_code in current_semester_courses and course["course_name"] == current_semester_courses[course_code]["course_name"]) and current_semester_courses[course_code]['grade'] not in ['W', 'I']:
+        return True
+    if course_code in pre_registered_courses:
+        unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course['credit'], 'prerequisites': course['prerequisites'], 'retake': False}
+        return True
+    return False
+
+def are_prerequisites_met(prerequisites, completed_courses, current_semester_courses):
+    for prerequisite in prerequisites:
+        if prerequisite not in completed_courses and prerequisite not in current_semester_courses:
+            return False
+    return True
 
 
 def get_curricumn_data(cookies, session):
@@ -307,58 +281,39 @@ def get_completed_courses(cookies, session, current_semester: str):
     return [completed_courses, current_semester_courses, pre_registered_courses]
 
 
-def fetch_response(url, session, cookies):
-    response = session.get(url, cookies=cookies)
-    return BeautifulSoup(response.text, default_parser)
-
-def extract_courses_from_table(table):
-    raw_course_elements = table[1].select("td:first-child")
-    courses_obj = {}
-    for course in raw_course_elements:
-        if course.text:
-            course_name = course.select_one("a").text
-            parsed_course = get_course_details(course_name)
-            courses_obj.update(parse_course_details(course, parsed_course))
-    return courses_obj
-
-def parse_course_details(course, parsed_course):
-    course_times = course.select("div > span")
-    credit = extract_credit(course.findNext('td').text)
-    course_details = {}
-    for time in course_times:
-        if 'Time' in time.text:
-            parsed_time = parse_time(time.text)
-            if parsed_time['day'] not in course_details:
-                course_details[parsed_time['day']] = {}
-            course_details[parsed_time['day']][parsed_time['time']] = {
-                'course_name': parsed_course['course_name'],
-                'class_id': parsed_course['class_id'],
-                'credit': credit,
-                'section': parsed_course['section'],
-                'type': parsed_time['type'],
-                'room': parsed_time['room']
-            }
-    return course_details
-
-def extract_credit(credit_text):
-    credit_values = sorted(
-        [int(c.strip()) for c in credit_text.split('-')], reverse=True
-    )
-    return credit_values[0] if credit_values else 0
-
 def process_semester(target, session, cookies):
     semesters = {}
     match = re.search(r'q=(.*)', target.attrs['value'])
-    if match and len(match.groups()) > 0:
+    if match is not None and len(match.groups()) > 0:
         try:
-            rq_url = f'https://portal.aiub.edu/Student/Registration?q={match.group(1)}'
-            soup = fetch_response(rq_url, session, cookies)
+            rq_url = 'https://portal.aiub.edu/Student/Registration?q=' + match.group(1)
+            response = session.get(rq_url, cookies=cookies)
+            soup = BeautifulSoup(response.text, default_parser)
             table = soup.select("table")
-            courses_obj = extract_courses_from_table(table)
+            raw_course_elements = table[1].select("td:first-child")
+            courses_obj = {}
+            for course in raw_course_elements:
+                if course.text != '':
+                    course_name = course.select_one("a").text
+                    parsed_course = get_course_details(course_name)
+                    course_times = course.select("div > span")
+                    credit = course.findNext('td').text.strip()
+                    credit = sorted([int(c.strip()) for c in credit.split('-')], reverse=True)[0]
+                    courses_obj = process_course_times(course_times, parsed_course, credit, courses_obj)
             semesters[target.text] = courses_obj
         except Exception as e:
             print('Error in process_semester: ', e)
     return semesters
+
+def process_course_times(course_times, parsed_course, credit, courses_obj):
+    for time in course_times:
+        if 'Time' not in time.text:
+            continue
+        parsed_time = parse_time(time.text)
+        if courses_obj.get(parsed_time['day']) is None:
+            courses_obj[parsed_time['day']] = {}
+        courses_obj[parsed_time['day']][parsed_time['time']] = {'course_name': parsed_course['course_name'], 'class_id': parsed_course['class_id'], 'credit': credit, 'section': parsed_course['section'], 'type': parsed_time['type'], 'room': parsed_time['room']}
+    return courses_obj
 
 
 def get_course_details(course):
