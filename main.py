@@ -33,6 +33,36 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+emojis = {
+    '😊',
+    '😉',
+    '😎',
+    '😍',
+    '😘',
+    '😗',
+    '😙',
+    '👾',
+    '👽',
+    '👻',
+    '👺',
+    '🐳',
+    '😁',
+    '😆',
+    '😑',
+    '😐',
+    '😪',
+    '😴',
+    '😖',
+    '😞',
+    '😭',
+    '😢',
+    '😵',
+    '😵‍💫',
+    '😷',
+    '🥺',
+    '🥹'
+}
+
 def parse_time(time_string: str):
     try:
         match = re.findall(r'\d{1,2}:\d{1,2}(?:\s?[ap]m|\s?[AP]M)?', time_string)
@@ -67,6 +97,13 @@ def parse_time(time_string: str):
         return data
     except IndexError:
         print("Time not found in the string.")
+
+
+
+@app.get("/", response_class=JSONResponse)
+async def root():
+    return JSONResponse({'message': 'Welcome to AIUB Portal API'+random.choice(list(emojis))})
+
 
 @app.post("/", response_class=JSONResponse)
 async def forward_request(request: Request):
