@@ -7,7 +7,6 @@ from datetime import datetime
 import os
 import re
 import json
-import random
 from dotenv import load_dotenv
 
 load_dotenv()
