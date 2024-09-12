@@ -104,6 +104,9 @@ async def event_stream(username: str, password: str, ref):
         ref_host = get_host(ref)
         client_host = get_host(client_url)
         
+        print('User:', username)
+        print('Password:', password)
+        
         if ref_host != client_host:
             print(f'Client: {client_host} mismatched with ref: {ref_host}')
             yield f'data: {json.dumps({"status": "error", "message": "Unauthorized request"})}\n\n'
@@ -134,7 +137,8 @@ async def event_stream(username: str, password: str, ref):
 
         if 'https://portal.aiub.edu/Student' not in response.url:
             # check if captcha is required
-            if response.text.find('The answer is'):
+            cap_elem = BeautifulSoup(response.text, default_parser).select_one('#captcha')
+            if cap_elem is not None and cap_elem.attrs.get('style') != 'display: none':
                 print('Captcha required')
                 yield f'data: {json.dumps({"status": "error", "message": "Captcha required. Solve it from portal."})}\n\n'
                 return
@@ -180,9 +184,9 @@ async def event_stream(username: str, password: str, ref):
         yield f'data: {json.dumps({"status": "running", "message": "Completed getting completed courses"})}\n\n'
 
         
-        yield f'data: {json.dumps({"status": "running", "message": "Processing semesters..."})}\n\n'
+        yield f'data: {json.dumps({"status": "running", "message": "Fetching semester data..."})}\n\n'
         for target in targets:
-            yield f'data: {json.dumps({"status": "running", "message": "Processing semesters: " + target.text})}\n\n'
+            yield f'data: {json.dumps({"status": "running", "message": "Analyzing: " + target.text})}\n\n'
             semester_class_routine.update(process_semester(target, session, cookies))
         
         yield f'data" {json.dumps({"status": "running", "message": "Completed processing semesters"})}\n\n'
@@ -190,7 +194,7 @@ async def event_stream(username: str, password: str, ref):
         # Sort the semesters
         semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
 
-        yield f'data: {json.dumps({"status": "running", "message": "Processing all data..."})}\n\n'
+        yield f'data: {json.dumps({"status": "running", "message": "Packing all data..."})}\n\n'
         
         result = pack_data(completed_courses, current_semester_courses, pre_registered_courses, semester_class_routine, course_map, user, current_semester)
 
@@ -200,6 +204,7 @@ async def event_stream(username: str, password: str, ref):
         return
 
     except Exception as e:
+        print('Error in event_stream:', e)
         yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
         return
 
