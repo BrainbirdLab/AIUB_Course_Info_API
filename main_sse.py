@@ -338,15 +338,16 @@ def get_completed_courses(cookies, session, current_semester: str):
         else:
             continue
 
-        if grade in ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F']:
-            completed_courses[course_code] = {'course_name': course_name, 'grade': grade}
-        elif grade == '-':
-            if semester == current_semester:
-                current_semester_courses[course_code] = {'course_name': course_name, 'grade': grade}
-            else:
-                pre_registered_courses[course_code] = {'course_name': course_name, 'grade': grade}
-        
-    return [completed_courses, current_semester_courses, pre_registered_courses]
+       if grade in ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D']:
+    completed_courses[course_code] = {'course_name': course_name, 'grade': grade}
+elif grade == '-' or grade == 'F' or grade == 'UW' or grade == 'I' or grade == 'W':
+    if semester == current_semester:
+        current_semester_courses[course_code] = {'course_name': course_name, 'grade': grade}
+    else:
+        pre_registered_courses[course_code] = {'course_name': course_name, 'grade': grade}
+
+return [completed_courses, current_semester_courses, pre_registered_courses]
+
 
 
 def process_semester(target, session, cookies):
