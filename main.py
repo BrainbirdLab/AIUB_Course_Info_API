@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import requests
@@ -208,10 +208,6 @@ async def forward_request(request: Request):
     
 
 def add_unlocked_courses(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
-    # write currentSemesterCourses to a file
-    with open('currentSemesterCourses.json', 'w') as f:
-        json.dump(current_semester_courses, f)
-
     for course_code, course in course_map.items():
         if should_skip_course(course_code, course, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
             continue
