@@ -168,6 +168,7 @@ async def event_stream(username: str, password: str, ref):
                 print('Captcha required')
                 yield f'data: {json.dumps({"status": "error", "message": "Captcha required. Solve it from portal."})}\n\n'
                 return
+            print('Invalid username or password')
             yield f'data: {json.dumps({"status": "error", "message": "Invalid username or password"})}\n\n'
             return
         
