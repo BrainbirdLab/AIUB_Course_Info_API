@@ -3,6 +3,7 @@
 import aiohttp
 import asyncio
 from fastapi import FastAPI, Form
+from pydantic import BaseModel
 from datetime import datetime
 from typing_extensions import Annotated
 from bs4 import BeautifulSoup, Tag
@@ -68,21 +69,31 @@ async def home():
     return {'Client': client_url, 'message': f'Version 2: {random_emoji}'}
 
 
+class UserData(BaseModel):
+    UserName: str
+    Password: str
 
 @app.post('/')
-async def forward_request(user_name: str = Annotated[str, Form(...)], password: str = Annotated[str, Form(...)]):
+async def login(data: any):
 
     print('Processing request...')
 
     url = 'https://portal.aiub.edu'
 
+    print(data)
+
+    user_name = ""
+    password = ""
+
     async with aiohttp.ClientSession() as session:
         try:
+
+            print(f'Logging in with {user_name}... and {password}')
             async with session.post(url, data={'UserName': user_name, 'Password': password}) as resp:
                 if resp.status != 200:
                     return {'success': False, 'message': 'Error in request'}
                 
-                print('Checking response...')
+                print('Checking response...', resp.url)
 
                 if 'https://portal.aiub.edu/Student' not in str(resp.url):
                     return {'success': False, 'message': 'Invalid username or password - ' + str(resp.url)}

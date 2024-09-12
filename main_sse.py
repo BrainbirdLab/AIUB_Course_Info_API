@@ -1,12 +1,11 @@
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import os
 import re
-import concurrent.futures
 import json
 import random
 from dotenv import load_dotenv
@@ -24,14 +23,6 @@ print(f'Client url: {client_url}')
 
 default_parser = 'html.parser'
 
-# Allow CORS to client_url
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[client_url],
-    allow_credentials=True,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
-)
 
 emojis = {
     '😊',
@@ -99,49 +90,79 @@ def parse_time(time_string: str):
         print("Time not found in the string.")
 
 
-# allow client url to access the api
-@app.middleware("http")
-async def cors(request, call_next):
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = client_url
-    return response
+client_url = 'http://localhost:5173'
 
+# Allow CORS to client_url
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[client_url, "http://127.0.0.1:5678"],
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 @app.get("/", response_class=JSONResponse)
 async def root():
-    return JSONResponse({'message': 'Welcome to AIUB Portal API v.2.0.1'+random.choice(list(emojis))})
+    return JSONResponse({'message': 'Welcome to AIUB Portal API'+random.choice(list(emojis))})
 
 
-@app.post("/", response_class=JSONResponse)
+@app.get("/login")
 async def forward_request(request: Request):
 
+    # query parameters
+    username = request.query_params.get('username')
+    password = request.query_params.get('password')
+
+    # Return the streaming response
+    return StreamingResponse(event_stream(username, password), media_type="text/event-stream")
+
+
+async def event_stream(username: str, password: str):
     try:
+        # Notify the client that processing has started
         print('Processing request...')
-        form = await request.form()
-        username = form['UserName']
-        password = form['Password']
+        yield f'data: {json.dumps({"status": "running", "message": "Processing request..."})}\n\n'
+
+        if username is None or password is None:
+            yield f'data: {json.dumps({"status": "error", "message": "Username and password are required"})}\n\n'
+            return
+        
+        # if empty username or password
+        if username == '' or password == '':
+            yield f'data: {json.dumps({"status": "error", "message": "Username and password are required"})}\n\n'
+            return
+
         url = 'https://portal.aiub.edu'
         
         session = requests.Session()
         response = session.post(url, data={'UserName': username, 'Password': password})
 
         if response.status_code != 200:
-            return JSONResponse({'success': False, 'message': 'Error in request'}, status_code=403)
+            print("Error in req")
+            yield f'data: {json.dumps({"status": "error", "message": "Error in request"})}\n\n'
+            return
 
         if 'https://portal.aiub.edu/Student' not in response.url:
-            print('Login failed')
-            return JSONResponse({'success': False, 'message': 'Invalid username or password'}, status_code=401)
+            # check if captcha is required
+            if response.text.find('The answer is'):
+                print('Captcha required')
+                yield f'data: {json.dumps({"status": "error", "message": "Captcha required. Solve it from portal."})}\n\n'
+                return
+            yield f'data: {json.dumps({"status": "error", "message": "Invalid username or password"})}\n\n'
+            return
+        
+        # Login successful
+        print('Login successful')
+        yield f'data: {json.dumps({"status": "running", "message": "Access granted"})}\n\n'
 
         if 'Student/Tpe/Start' in response.url:
-            print('Evaluation pending')
-            return JSONResponse({'success': False, 'message': 'TPE Evaluation pending on portal'}, status_code=401)
-
-        print('Login successful')
+            yield f'data: {json.dumps({"status": "error", "message": "TPE Evaluation Pending"})}\n\n'
+            return
 
         response = session.get('https://portal.aiub.edu/Student')
         cookies = session.cookies.get_dict()
 
-        soup = BeautifulSoup(response.text, default_parser)
+        soup = BeautifulSoup(response.text, 'html.parser')
         targets = soup.select("#SemesterDropDown > option")
         user = soup.select_one('.navbar-link').text
 
@@ -152,60 +173,69 @@ async def forward_request(request: Request):
         user = user.title()
 
         current_semester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
-        semester_class_routine = {} # contains all semester info
-        course_map = {} # contains all course info
-        completed_courses = {} # contains all completed courses info
-        current_semester_courses = {} # contains all current semester courses info
-        unlocked_courses = {} # contains all unlocked courses info
-        pre_registered_courses = {} # contains all pre-registered courses info
+        semester_class_routine = {}
+        course_map = {}
+        completed_courses = {}
+        current_semester_courses = {}
+        unlocked_courses = {}
+        pre_registered_courses = {}
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Execute getCurricumnData concurrently
-            course_map_future = executor.submit(get_curricumn_data, cookies, session)
-
-            completed_courses_map_future = executor.submit(get_completed_courses, cookies, session, current_semester)
-
-            # Execute process_semester concurrently for each target
-            futures = [executor.submit(process_semester, target, session, cookies) for target in targets]
-                        # Wait for getCurricumnData to complete and retrieve the result
-            course_map = course_map_future.result()
-
-            # Wait for getGradeReport to complete and retrieve the result
-            completed_courses = completed_courses_map_future.result()[0]
-            current_semester_courses = completed_courses_map_future.result()[1]
-            pre_registered_courses = completed_courses_map_future.result()[2]
-
-            # Wait for process_semester tasks to complete and update semesters
-            for future in concurrent.futures.as_completed(futures):
-                semester_class_routine.update(future.result())
-
-            
-        # Sort the semesters by year
-        semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
+        # use the following code to run the code synchronously
+        yield f'data: {json.dumps({"status": "running", "message": "Getting curriculum data..."})}\n\n'
+        course_map = get_curricumn_data(cookies, session)
         
-        print('Processing data...')
+        yield f'data: {json.dumps({"status": "running", "message": "Completed getting curriculum data"})}\n\n'
 
-        # Iterate over the gradesMap. A student can take a course after completing the prerequisites. And also if he/she has taken the course before, he must have D grade
+        
+        yield f'data: {json.dumps({"status": "running", "message": "Getting completed courses..."})}\n\n'
+        completed_courses, current_semester_courses, pre_registered_courses = get_completed_courses(cookies, session, current_semester)
+        
+        yield f'data: {json.dumps({"status": "running", "message": "Completed getting completed courses"})}\n\n'
+
+        
+        yield f'data: {json.dumps({"status": "running", "message": "Processing semesters..."})}\n\n'
+        for target in targets:
+            semester_class_routine.update(process_semester(target, session, cookies))
+        
+        yield f'data" {json.dumps({"status": "running", "message": "Pompleted processing semesters"})}\n\n'
+
+
+        # Sort the semesters
+        semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
+
+        yield f'data: {json.dumps({"status": "running", "message": "Processing all data..."})}\n\n'
+
+        # Iterate over completed courses
         for course_code, course in completed_courses.items():
-            # If student has taken the course before and has D grade, then he/she can take the course again
             if course['grade'] == 'D':
-                unlocked_courses[course_code] = {'course_name': course['course_name'], 'credit': course_map[course_code]['credit'], 'prerequisites': course_map[course_code]['prerequisites'], 'retake': True}
+                unlocked_courses[course_code] = {
+                    'course_name': course['course_name'],
+                    'credit': course_map[course_code]['credit'],
+                    'prerequisites': course_map[course_code]['prerequisites'],
+                    'retake': True
+                }
 
-        # Add unlocked courses to the unlockedCourses dictionary
         unlocked_courses = add_unlocked_courses(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses)
 
-        # Need to get more data like completed courses, credits_completed, credits_remaining, course_completed_count
+        result = {
+            'semesterClassRoutine': semester_class_routine,
+            'unlockedCourses': unlocked_courses,
+            'completedCourses': completed_courses,
+            'preregisteredCourses': pre_registered_courses,
+            'currentSemester': current_semester,
+            'user': user,
+            'curriculumncourses': course_map
+        }
 
-        result = {'semesterClassRoutine': semester_class_routine, 'unlockedCourses': unlocked_courses, 'completedCourses': completed_courses, 'preregisteredCourses': pre_registered_courses, 'currentSemester': current_semester, 'user': user, 'curriculumncourses': course_map}
+        print('Data processing complete')
+        # send as data: {status: 'complete', result: result}
+        yield f'data: {json.dumps({"status": "complete", "result": result})}\n\n'
+        return
 
-        print('Sending response...')
-
-        return JSONResponse({'result': result, 'success': True}, status_code=200)
-    
     except Exception as e:
-        print(e)
-        return JSONResponse({'success': False, 'message': 'Something went wrong'}, status_code=500)
-    
+        yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+        return
+
 
 def add_unlocked_courses(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
     # write currentSemesterCourses to a file
@@ -258,13 +288,9 @@ def get_curricumn_data(cookies, session):
 
     course_map = {}  # Will contain the course code as key and {coursename, prerequisit[]} as value
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Execute process_curriculum concurrently
-        futures = [executor.submit(process_curriculum, ID, session, cookies) for ID in curricumn_id]
+    for _id in curricumn_id:
+        course_map.update(process_curriculum(_id, session, cookies))
 
-        # Wait for process_curriculum tasks to complete and update courseMap
-        for future in concurrent.futures.as_completed(futures):
-            course_map.update(future.result())
 
     return course_map
 

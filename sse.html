@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE</title>
+</head>
+<body>
+    Server sent events test
+    <div id="result"></div>
+    <button onclick="Run()">Run</button>
+    <script>
+        const username = '22-49355-3'
+        const password = 'a55H0le;@'
+        let result = document.getElementById('result');
+        function Run() {
+            let source = new EventSource(`http://localhost:8000/login?username=${username}&password=${password}`, 
+            { withCredentials: true}
+            );
+            source.onmessage = function(event) {
+                console.log(event);
+                // Close the connection when the user data is empty
+                if (event.event == 'close') {
+                    source.close();
+                    console.log('Connection closed');
+                    return;
+                }
+                result.innerHTML += event.data + '<br>';
+            };
+            source.onerror = function(event) {
+                console.log('Error', event);
+                source.close();
+            };
+        }
+    </script>
+</body>
+</html>
