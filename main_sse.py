@@ -90,12 +90,10 @@ def parse_time(time_string: str):
         print("Time not found in the string.")
 
 
-client_url = 'http://localhost:5173'
-
 # Allow CORS to client_url
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[client_url, "http://127.0.0.1:5678"],
+    allow_origins=[client_url],
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods
     allow_headers=["*"],  # Allow all headers
@@ -103,7 +101,7 @@ app.add_middleware(
 
 @app.get("/", response_class=JSONResponse)
 async def root():
-    return JSONResponse({'message': 'Welcome to AIUB Portal API'+random.choice(list(emojis))})
+    return JSONResponse({'message': 'Welcome to AIUB Portal API v.2.0.1'+random.choice(list(emojis))})
 
 
 @app.get("/login")
