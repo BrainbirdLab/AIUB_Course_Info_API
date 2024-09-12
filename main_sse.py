@@ -151,7 +151,7 @@ async def event_stream(username: str, password: str):
         
         # Login successful
         print('Login successful')
-        yield f'data: {json.dumps({"status": "running", "message": "Access granted"})}\n\n'
+        yield f'data: {json.dumps({"status": "running", "message": "Logged in to portal"})}\n\n'
 
         if 'Student/Tpe/Start' in response.url:
             yield f'data: {json.dumps({"status": "error", "message": "TPE Evaluation Pending"})}\n\n'
@@ -195,7 +195,7 @@ async def event_stream(username: str, password: str):
         for target in targets:
             semester_class_routine.update(process_semester(target, session, cookies))
         
-        yield f'data" {json.dumps({"status": "running", "message": "Pompleted processing semesters"})}\n\n'
+        yield f'data" {json.dumps({"status": "running", "message": "Completed processing semesters"})}\n\n'
 
 
         # Sort the semesters
