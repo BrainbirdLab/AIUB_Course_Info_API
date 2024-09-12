@@ -102,7 +102,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     # return html content
-    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a>")
+    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.0.5</pre>")
 
 
 @app.get("/login")
@@ -212,10 +212,16 @@ async def event_stream(username: str, password: str, ref):
         
         yield f'data: {json.dumps({"status": "running", "message": "Processing semesters..."})}\n\n'
         for target in targets:
+            yield f'data: {json.dumps({"status": "running", "message": "Processing semesters: " + target.text})}\n\n'
             semester_class_routine.update(process_semester(target, session, cookies))
         
         yield f'data" {json.dumps({"status": "running", "message": "Completed processing semesters"})}\n\n'
 
+        # Sort the semesters
+        semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
+
+        yield f'data: {json.dumps({"status": "running", "message": "Processing all data..."})}\n\n'
+        
         result = pack_data(completed_courses, current_semester_courses, pre_registered_courses, semester_class_routine, course_map, user, current_semester)
 
         print('Data processing complete')
@@ -229,10 +235,6 @@ async def event_stream(username: str, password: str, ref):
 
 
 def pack_data(completed_courses, current_semester_courses, pre_registered_courses, semester_class_routine, course_map, user, current_semester):
-    # Sort the semesters
-    semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
-
-    yield f'data: {json.dumps({"status": "running", "message": "Processing all data..."})}\n\n'
 
     unlocked_courses = {}
 
