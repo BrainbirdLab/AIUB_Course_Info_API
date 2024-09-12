@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 from bs4 import BeautifulSoup
@@ -99,24 +99,46 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
-@app.get("/", response_class=JSONResponse)
+@app.get("/")
 async def root():
-    return JSONResponse({'message': 'Welcome to AIUB Portal API v.2.0.1'+random.choice(list(emojis))})
+    # return html content
+    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a>")
 
 
 @app.get("/login")
 async def forward_request(request: Request):
+    
+    ref = request.headers.get('referer')
 
     # query parameters
     username = request.query_params.get('username')
     password = request.query_params.get('password')
 
     # Return the streaming response
-    return StreamingResponse(event_stream(username, password), media_type="text/event-stream")
+    return StreamingResponse(event_stream(username, password, ref), media_type="text/event-stream")
 
 
-async def event_stream(username: str, password: str):
+
+def get_host(url: str | None) -> str:
     try:
+        if url is None:
+            return ''
+        return url.split('/')[2]
+    except IndexError:
+        return ''
+
+
+async def event_stream(username: str, password: str, ref):
+    try:
+        
+        ref_host = get_host(ref)
+        client_host = get_host(client_url)
+        
+        if ref_host != client_host:
+            print(f'Client: {client_host} mismatched with ref: {ref_host}')
+            yield f'data: {json.dumps({"status": "error", "message": "Unauthorized request"})}\n\n'
+            return
+        
         # Notify the client that processing has started
         print('Processing request...')
         yield f'data: {json.dumps({"status": "running", "message": "Processing request..."})}\n\n'
@@ -158,6 +180,7 @@ async def event_stream(username: str, password: str):
             return
 
         response = session.get('https://portal.aiub.edu/Student')
+        
         cookies = session.cookies.get_dict()
 
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -172,11 +195,6 @@ async def event_stream(username: str, password: str):
 
         current_semester = soup.select_one('#SemesterDropDown > option[selected="selected"]').text
         semester_class_routine = {}
-        course_map = {}
-        completed_courses = {}
-        current_semester_courses = {}
-        unlocked_courses = {}
-        pre_registered_courses = {}
 
         # use the following code to run the code synchronously
         yield f'data: {json.dumps({"status": "running", "message": "Getting curriculum data..."})}\n\n'
@@ -197,33 +215,7 @@ async def event_stream(username: str, password: str):
         
         yield f'data" {json.dumps({"status": "running", "message": "Completed processing semesters"})}\n\n'
 
-
-        # Sort the semesters
-        semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
-
-        yield f'data: {json.dumps({"status": "running", "message": "Processing all data..."})}\n\n'
-
-        # Iterate over completed courses
-        for course_code, course in completed_courses.items():
-            if course['grade'] == 'D':
-                unlocked_courses[course_code] = {
-                    'course_name': course['course_name'],
-                    'credit': course_map[course_code]['credit'],
-                    'prerequisites': course_map[course_code]['prerequisites'],
-                    'retake': True
-                }
-
-        unlocked_courses = add_unlocked_courses(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses)
-
-        result = {
-            'semesterClassRoutine': semester_class_routine,
-            'unlockedCourses': unlocked_courses,
-            'completedCourses': completed_courses,
-            'preregisteredCourses': pre_registered_courses,
-            'currentSemester': current_semester,
-            'user': user,
-            'curriculumncourses': course_map
-        }
+        result = pack_data(completed_courses, current_semester_courses, pre_registered_courses, semester_class_routine, course_map, user, current_semester)
 
         print('Data processing complete')
         # send as data: {status: 'complete', result: result}
@@ -235,10 +227,40 @@ async def event_stream(username: str, password: str):
         return
 
 
+def pack_data(completed_courses, current_semester_courses, pre_registered_courses, semester_class_routine, course_map, user, current_semester):
+    # Sort the semesters
+    semester_class_routine = dict(sorted(semester_class_routine.items(), key=lambda x: x[0]))
+
+    yield f'data: {json.dumps({"status": "running", "message": "Processing all data..."})}\n\n'
+
+    unlocked_courses = {}
+
+    # Iterate over completed courses
+    for course_code, course in completed_courses.items():
+        if course['grade'] == 'D':
+            unlocked_courses[course_code] = {
+                'course_name': course['course_name'],
+                'credit': course_map[course_code]['credit'],
+                'prerequisites': course_map[course_code]['prerequisites'],
+                'retake': True
+            }
+
+    unlocked_courses = add_unlocked_courses(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses)
+
+    result = {
+        'semesterClassRoutine': semester_class_routine,
+        'unlockedCourses': unlocked_courses,
+        'completedCourses': completed_courses,
+        'preregisteredCourses': pre_registered_courses,
+        'currentSemester': current_semester,
+        'user': user,
+        'curriculumncourses': course_map
+    }
+    
+    return result
+
+
 def add_unlocked_courses(course_map, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
-    # write currentSemesterCourses to a file
-    with open('currentSemesterCourses.json', 'w') as f:
-        json.dump(current_semester_courses, f)
 
     for course_code, course in course_map.items():
         if should_skip_course(course_code, course, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
