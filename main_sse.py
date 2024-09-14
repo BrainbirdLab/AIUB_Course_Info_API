@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 import redis
 from contextlib import asynccontextmanager
 
-from notice import check_aiub_notices, check_redis_connection, process_new_notices, signal_handler, update_clients, stop_event, redis_error_message
+from notice import check_aiub_notices, check_redis_connection, process_new_notices, signal_handler, update_clients, stop_event, redis_error_message, send_web_push
 
 load_dotenv()
 
@@ -40,58 +40,6 @@ r = redis.Redis.from_url(REDIS_URL)
 # Configurations
 aiub_home_url = 'https://www.aiub.edu'
 default_parser = 'html.parser'
-
-
-
-
-import random
-
-# Dummy notices data
-notices_data = [
-    ['12 Sep::Data collection for Facial Access Control System',
-     '11 Sep::22nd Convocation List [Final Release]',
-     '05 Sep::Pre Registration Flowchart of Fall 24-25'],
-    ['12 Sep::Data collection for Facial Access Control System',
-     '11 Sep::22nd Convocation List [Final Release]',
-     '05 Sep::Pre Registration Flowchart of Fall 24-25'],
-    ['13 Sep::AIUB Sports Fest 2024 Announcement',
-     '12 Sep::Data collection for Facial Access Control System',
-     '11 Sep::22nd Convocation List [Final Release]'],
-    ['13 Sep::AIUB Sports Fest 2024 Announcement',
-     '12 Sep::Data collection for Facial Access Control System',
-     '11 Sep::22nd Convocation List [Final Release]'],
-    ['14 Sep::Robotics Club Meeting',
-     '13 Sep::AIUB Sports Fest 2024 Announcement',
-     '12 Sep::Data collection for Facial Access Control System'],
-    ['14 Sep::Robotics Club Meeting',
-     '13 Sep::AIUB Sports Fest 2024 Announcement',
-     '12 Sep::Data collection for Facial Access Control System'],
-    ['15 Sep::AIUB Career Fair 2024',
-     '14 Sep::Robotics Club Meeting',
-    '13 Sep::AIUB Sports Fest 2024 Announcement'],
-    ['17 Sep::Google I/O Extended 2024',
-     '15 Sep::AIUB Career Fair 2024',
-     '14 Sep::Robotics Club Meeting'],
-    ['19 Sep::AIUB Hackathon 2024',
-     '17 Sep::Google I/O Extended 2024',
-     '15 Sep::AIUB Career Fair 2024'],
-]
-
-# Async function to simulate fetching new notices
-'''
-count = 0
-async def fetch_new_notice(n: int = 3):
-    global count
-    notice_list = notices_data[count]
-    
-    if count == len(notices_data) - 1:
-        return notice_list
-    
-    count += 1
-    
-    return notice_list
-'''
-
 
 # Lifespan context manager to manage the app lifecycle
 @asynccontextmanager
@@ -134,6 +82,9 @@ async def subscribe(subscription: dict):
     try:
         # Add subscription to Redis
         r.sadd(CLIENTS_KEY, json.dumps(subscription))
+        
+        # send a Thank you notification
+        send_web_push(subscription, "You would be updated with the future notifications", "Thank you", "server")
         return {"status": "success", "message": "Subscribed successfully"}
     
     except Exception as e:
@@ -172,7 +123,7 @@ async def subscription_status(subscription: dict):
 # test dev trigger for notification
 @app.get('/push')
 async def push_notification():
-    return update_clients(['Test notification'])
+    return update_clients(['Test notification'], "Test is successfull", 'Hello world!')
 
 @app.get('/notices')
 async def get_notices(request: Request):

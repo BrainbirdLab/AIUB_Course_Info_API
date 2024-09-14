@@ -13,6 +13,8 @@ default_parser = 'html.parser'
 
 stop_event = threading.Event()
 
+NOTICE_LEN = 8
+
 client_url = os.environ.get('CLIENT_URL')
 
 VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
@@ -67,18 +69,20 @@ def format_notice(notice):
     
 
 # Async function to check AIUB notices
-async def fetch_new_notice(n: int = 3):
+async def fetch_new_notice():
     session = requests.Session()
     response = session.get(aiub_home_url)
     soup = BeautifulSoup(response.text, default_parser)
 
     notice_list = []
     
+    global NOTICE_LEN
+    
     notices = soup.select('.notice-item')
     if len(notices) > 0:
         # Get the last Count notices, If notices are less than Count, get all minimum notices
-        n = min(n, len(notices))
-        for notice in notices[:n]:
+        NOTICE_LEN = min(NOTICE_LEN, len(notices))
+        for notice in notices[:NOTICE_LEN]:
             formatted_notice = format_notice(notice)
             notice_list.append(formatted_notice)
         
@@ -87,6 +91,7 @@ async def fetch_new_notice(n: int = 3):
 
 async def process_new_notices():
     try:
+        global NOTICE_LEN
         print("Checking for new notices...")
         new_notices = await fetch_new_notice()
         if new_notices:
@@ -94,7 +99,7 @@ async def process_new_notices():
                 # Store the new notices in Redis
                 r.rpush(NOTICE_CHANNEL, *new_notices)
                 # Update the clients with the new notices
-                update_clients(new_notices)
+                update_clients(new_notices, 'American Internation University - Bangladesh', 'aiub')
             else:
                 redis_notices = r.lrange(NOTICE_CHANNEL, 0, -1)
                 # decode the notices from bytes to string
@@ -105,10 +110,10 @@ async def process_new_notices():
                     # Store the new notices in Redis
                     r.lpush(NOTICE_CHANNEL, *new_notices)
                     current_notices_len = r.llen(NOTICE_CHANNEL)
-                    if current_notices_len > 5:
-                        r.ltrim(NOTICE_CHANNEL, 0, 5) # only 0-5 notices will be stored
+                    if current_notices_len > NOTICE_LEN:
+                        r.ltrim(NOTICE_CHANNEL, 0, NOTICE_LEN - 1)
                     # Update the clients with the new notices
-                    update_clients(new_notices)
+                    update_clients(new_notices, 'American Internation University - Bangladesh', 'aiub')
 
     except Exception as e:
         print(f"Error processing notices: {e}")
@@ -149,16 +154,25 @@ def signal_handler(_, __):
 
 
 
-def send_web_push(subscription_information, message_body):
+def send_web_push(subscription_information, message_body, title: str, data_type: str):
+    
+    data = json.dumps({
+        "data": message_body,
+        "title": title,
+        "type": data_type
+    })
+    
     return webpush(
         subscription_info=subscription_information,
-        data=message_body,
+        data=data,
         vapid_private_key=VAPID_PRIVATE_KEY,
         vapid_claims=VAPID_CLAIMS
-    ) 
+    )
+
+
  
  
-def update_clients(notices: list):
+def update_clients(notices: list, title: str, notice_type: str):
     # Check Redis connection
     if not check_redis_connection():
         return {"status": "error", "message": redis_error_message}
@@ -172,7 +186,7 @@ def update_clients(notices: list):
             client = json.loads(client.decode('utf-8'))  # Decode from bytes and convert to dict
             # send reverse order of notices
             for notice in reversed(notices):
-                send_web_push(client, notice)
+                send_web_push(client, notice, title, notice_type)
         
         except WebPushException as ex:
             # Handle 410 Gone (unregistered client)
