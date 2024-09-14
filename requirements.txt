@@ -6,3 +6,5 @@ uvicorn
 python-dotenv
 python-multipart
 typing-extensions
+pywebpush
+redis[hiredis]
