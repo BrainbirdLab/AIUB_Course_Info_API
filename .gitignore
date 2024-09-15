@@ -2,3 +2,5 @@ test.py
 .env
 .json
 __pycache__
+.vscode
+.venv

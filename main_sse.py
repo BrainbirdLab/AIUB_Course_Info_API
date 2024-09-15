@@ -1,5 +1,7 @@
+import asyncio
+import signal
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 from bs4 import BeautifulSoup
@@ -8,56 +10,51 @@ import os
 import re
 import json
 from dotenv import load_dotenv
+import redis
+from contextlib import asynccontextmanager
+
+from notice import check_aiub_notices, check_redis_connection, process_new_notices, signal_handler, update_clients, stop_event, redis_error_message, send_web_push
 
 load_dotenv()
-
-app = FastAPI()
 
 # Get the port number from the environment variable PORT, if not found, use 5000
 PORT = int(os.environ.get('PORT', 5000))
 
 client_url = os.environ.get('CLIENT_URL')
 
-print(f'Client url: {client_url}')
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 
+aiub_portal_url = 'https://portal.aiub.edu'
+aiub_home_url = 'https://www.aiub.edu'
+
+REDIS_URL = os.environ.get('REDIS_URL')
+
+# Redis keys
+CLIENTS_KEY = "connected_clients"  # Redis set to store clients
+NOTICE_CHANNEL = "notice_channel"  # Redis Pub/Sub channel for notices
+
+# Redis client for storing connected clients and handling Pub/Sub
+r = redis.Redis.from_url(REDIS_URL)
+
+# Configurations
+aiub_home_url = 'https://www.aiub.edu'
 default_parser = 'html.parser'
 
-
-def parse_time(time_string: str):
+# Lifespan context manager to manage the app lifecycle
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    signal.signal(signal.SIGINT, signal_handler)  # Handle Ctrl+C for clean shutdown
+    notice_task = asyncio.create_task(check_aiub_notices())  # Start the background task
     try:
-        match = re.findall(r'\d{1,2}:\d{1,2}(?:\s?[ap]m|\s?[AP]M)?', time_string)
-        day_map = {'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'}
-        class_type = re.search(r'\((.*?)\)', time_string).group(1)
-        day = day_map[re.search(r'(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', time_string).group()]
-        room = re.search(r'Room: (.*)', time_string).group(1)
-        start_time, end_time = match[0], match[1]
-        start_time_obj = ''
-        end_time_obj = ''
-        #if time contains am/pm or AM/PM
-        AM_TIME_FORMAT = '%I:%M'
-        PM_TIME_FORMAT = AM_TIME_FORMAT + ' %p'
-        if "am" in start_time.lower() or "pm" in start_time.lower():
-            start_time_obj = datetime.strptime(start_time, PM_TIME_FORMAT)
-        else:
-            start_time_obj = datetime.strptime(start_time, AM_TIME_FORMAT)
-        if "am" in end_time.lower() or "pm" in end_time.lower():
-            end_time_obj = datetime.strptime(end_time, PM_TIME_FORMAT)
-        else:
-            end_time_obj = datetime.strptime(end_time, AM_TIME_FORMAT)
+        yield
+    finally:
+        stop_event.set()  # Stop the background task when shutting down
+        notice_task.cancel()  # Cancel the task gracefully
+        await notice_task  # Wait for task to complete
+        print("Background task stopped")
 
-        start_time_formatted = start_time_obj.strftime(PM_TIME_FORMAT)
-        end_time_formatted = end_time_obj.strftime(PM_TIME_FORMAT)
-        final_time = f"{start_time_formatted} - {end_time_formatted}"
-        data = {
-            "type": class_type,
-            "time": final_time,
-            "day": day,
-            "room": room
-        }
-        return data
-    except IndexError:
-        print("Time not found in the string.")
-
+app = FastAPI(lifespan=lifespan)
 
 # Allow CORS to client_url
 app.add_middleware(
@@ -68,11 +65,92 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
+
+
 @app.get("/")
 async def root():
     # return html content
     return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.0.5</pre>")
 
+
+@app.get('/getkey')
+async def get_key():
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+@app.post('/subscribe')
+async def subscribe(subscription: dict):
+    try:
+        # Add subscription to Redis
+        r.sadd(CLIENTS_KEY, json.dumps(subscription))
+        
+        # send a Thank you notification
+        send_web_push(subscription, "You would be updated with the future notifications", "Thank you", "server")
+        return {"status": "success", "message": "Subscribed successfully"}
+    
+    except Exception as e:
+        # Handle general exceptions
+        print(f"Error in subscription process: {e}")
+        return {"status": "error", "message": "Subscription failed"}
+    
+@app.post('/unsubscribe')
+async def unsubscribe(subscription: dict):
+    # check Redis connection
+    if not check_redis_connection():
+        return {"status": "error", "message": redis_error_message}
+    
+    # Check if the subscription exists in Redis
+    if not r.sismember(CLIENTS_KEY, json.dumps(subscription)):
+        return {"status": "error", "message": "Subscription not found"}
+    
+    # Remove subscription from Redis
+    r.srem(CLIENTS_KEY, json.dumps(subscription))
+    return {"status": "success", "message": "Unsubscribed successfully"}
+
+
+@app.post('/subscription-status')
+async def subscription_status(subscription: dict):
+    # Check Redis connection
+    if not check_redis_connection():
+        return {"status": "error", "message": redis_error_message, "subscribed": False}
+    
+    # Check if the subscription exists in Redis
+    if r.sismember(CLIENTS_KEY, json.dumps(subscription)):
+        return {"status": "success", "message": "Subscription exists", "subscribed": True}
+    else:
+        return {"status": "error", "message": "Subscription not found", "subscribed": False}
+
+
+# test dev trigger for notification
+@app.get('/push/{auth}/{message}')
+async def push_notification(_: Request, auth: str, message: str):
+    auth_id = os.environ.get('AUTH_ID')
+    if auth != auth_id and message == '':
+        return {"status": "error", "message": "Unauthorized request"}
+    
+    return update_clients([message], "Message from developer", 'dev')
+
+@app.get('/notices')
+async def get_notices(request: Request):
+    print('Request received')
+    ref = get_host(request.headers.get('referer'))
+    client_host = get_host(client_url)
+    
+    if ref != client_host:
+        return {"status": "error", "message": "Unauthorized request"}
+    
+    
+    # Check Redis connection
+    if not check_redis_connection():
+        return {"status": "error", "message": redis_error_message}
+    
+    await process_new_notices()
+    
+    # Get the notices from Redis
+    notices = r.lrange(NOTICE_CHANNEL, 0, -1)
+    # Decode the notices from bytes to string
+    notices = [notice.decode('utf-8') for notice in notices]
+    
+    return {"status": "success", "notices": notices}
 
 @app.get("/login")
 async def forward_request(request: Request):
@@ -87,10 +165,16 @@ async def forward_request(request: Request):
     return StreamingResponse(event_stream(username, password, ref), media_type="text/event-stream")
 
 
+@app.get("*")
+def catch_all():
+    # redirect to the root
+    return RedirectResponse(url="/")
 
 def get_host(url: str | None) -> str:
     try:
         if url is None:
+            return ''
+        if url == '':
             return ''
         return url.split('/')[2]
     except IndexError:
@@ -102,9 +186,6 @@ async def event_stream(username: str, password: str, ref):
         
         ref_host = get_host(ref)
         client_host = get_host(client_url)
-        
-        print('User:', username)
-        print('Password:', password)
         
         if ref_host != client_host:
             print(f'Client: {client_host} mismatched with ref: {ref_host}')
@@ -123,11 +204,9 @@ async def event_stream(username: str, password: str, ref):
         if username == '' or password == '':
             yield f'data: {json.dumps({"status": "error", "message": "Username and password are required"})}\n\n'
             return
-
-        url = 'https://portal.aiub.edu'
         
         session = requests.Session()
-        response = session.post(url, data={'UserName': username, 'Password': password})
+        response = session.post(aiub_portal_url, data={'UserName': username, 'Password': password})
 
         if response.status_code != 200:
             print("Error in req")
@@ -157,7 +236,7 @@ async def event_stream(username: str, password: str, ref):
         
         cookies = session.cookies.get_dict()
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, default_parser)
         targets = soup.select("#SemesterDropDown > option")
         user = soup.select_one('.navbar-link').text
 
@@ -397,3 +476,40 @@ def get_course_details(course):
     except IndexError:
         print("Course not found in the string:", course)
         return {"class_id": "", "course_name": "", "section": ""}
+
+
+
+def parse_time(time_string: str):
+    try:
+        match = re.findall(r'\d{1,2}:\d{1,2}(?:\s?[ap]m|\s?[AP]M)?', time_string)
+        day_map = {'Sun': 'Sunday', 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'}
+        class_type = re.search(r'\((.*?)\)', time_string).group(1)
+        day = day_map[re.search(r'(Sun|Mon|Tue|Wed|Thu|Fri|Sat)', time_string).group()]
+        room = re.search(r'Room: (.*)', time_string).group(1)
+        start_time, end_time = match[0], match[1]
+        start_time_obj = ''
+        end_time_obj = ''
+        #if time contains am/pm or AM/PM
+        AM_TIME_FORMAT = '%I:%M'
+        PM_TIME_FORMAT = AM_TIME_FORMAT + ' %p'
+        if "am" in start_time.lower() or "pm" in start_time.lower():
+            start_time_obj = datetime.strptime(start_time, PM_TIME_FORMAT)
+        else:
+            start_time_obj = datetime.strptime(start_time, AM_TIME_FORMAT)
+        if "am" in end_time.lower() or "pm" in end_time.lower():
+            end_time_obj = datetime.strptime(end_time, PM_TIME_FORMAT)
+        else:
+            end_time_obj = datetime.strptime(end_time, AM_TIME_FORMAT)
+
+        start_time_formatted = start_time_obj.strftime(PM_TIME_FORMAT)
+        end_time_formatted = end_time_obj.strftime(PM_TIME_FORMAT)
+        final_time = f"{start_time_formatted} - {end_time_formatted}"
+        data = {
+            "type": class_type,
+            "time": final_time,
+            "day": day,
+            "room": room
+        }
+        return data
+    except IndexError:
+        print("Time not found in the string.")
