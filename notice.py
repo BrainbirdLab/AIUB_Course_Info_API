@@ -166,7 +166,8 @@ def send_web_push(subscription_information, message_body, title: str, data_type:
         subscription_info=subscription_information,
         data=data,
         vapid_private_key=VAPID_PRIVATE_KEY,
-        vapid_claims=VAPID_CLAIMS
+        vapid_claims=VAPID_CLAIMS,
+        ttl=86400,  # 1 day TTL (in seconds)
     )
 
 

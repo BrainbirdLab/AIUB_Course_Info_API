@@ -121,18 +121,23 @@ async def subscription_status(subscription: dict):
 
 
 # test dev trigger for notification
-@app.get('/push')
-async def push_notification():
-    return update_clients(['Test notification'], "Test is successfull", 'Hello world!')
+@app.get('/push/{auth}/{message}')
+async def push_notification(_: Request, auth: str, message: str):
+    auth_id = os.environ.get('AUTH_ID')
+    if auth != auth_id and message == '':
+        return {"status": "error", "message": "Unauthorized request"}
+    
+    return update_clients([message], "Message from developer", 'dev')
 
 @app.get('/notices')
 async def get_notices(request: Request):
-    
+    print('Request received')
     ref = get_host(request.headers.get('referer'))
     client_host = get_host(client_url)
     
     if ref != client_host:
         return {"status": "error", "message": "Unauthorized request"}
+    
     
     # Check Redis connection
     if not check_redis_connection():
@@ -168,6 +173,8 @@ def catch_all():
 def get_host(url: str | None) -> str:
     try:
         if url is None:
+            return ''
+        if url == '':
             return ''
         return url.split('/')[2]
     except IndexError:
