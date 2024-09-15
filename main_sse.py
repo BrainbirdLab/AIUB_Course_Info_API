@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 import redis
 from contextlib import asynccontextmanager
 
-from notice import check_aiub_notices, check_redis_connection, process_new_notices, signal_handler, update_clients, stop_event, redis_error_message, send_web_push
+from notice import check_aiub_notices, check_redis_connection, process_new_notices, signal_handler, update_clients, stop_event, redis_error_message, send_web_push, CLIENTS_KEY, NOTICE_CHANNEL
 
 load_dotenv()
 
@@ -29,10 +29,6 @@ aiub_portal_url = 'https://portal.aiub.edu'
 aiub_home_url = 'https://www.aiub.edu'
 
 REDIS_URL = os.environ.get('REDIS_URL')
-
-# Redis keys
-CLIENTS_KEY = "connected_clients"  # Redis set to store clients
-NOTICE_CHANNEL = "notice_channel"  # Redis Pub/Sub channel for notices
 
 # Redis client for storing connected clients and handling Pub/Sub
 r = redis.Redis.from_url(REDIS_URL)

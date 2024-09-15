@@ -23,11 +23,11 @@ VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 aiub_portal_url = 'https://portal.aiub.edu'
 aiub_home_url = 'https://www.aiub.edu'
 
-REDIS_URL = os.environ.get('REDIS_URL')
-
 # Redis keys
-CLIENTS_KEY = "connected_clients"  # Redis set to store clients
-NOTICE_CHANNEL = "notice_channel"  # Redis Pub/Sub channel for notices
+CLIENTS_KEY = "connected_clients_1"  # Redis set to store clients
+NOTICE_CHANNEL = "notice_channel_1"  # Redis Pub/Sub channel for notices
+
+REDIS_URL = os.environ.get('REDIS_URL')
 
 # Redis client for storing connected clients and handling Pub/Sub
 r = redis.Redis.from_url(REDIS_URL)
@@ -60,6 +60,16 @@ def format_notice(notice):
     date_str = '.date'
     title = notice.select_one('.card-title').text
     date = ''
+    
+    link = notice.select_one('a')
+    
+    if link is not None:
+        link = link.get('href')
+        if link.startswith('http') or link.startswith('www'):
+            title = f"{title}::{link}"
+        else:
+            title = f"{title}::{aiub_home_url + link}"
+        
     if notice.select_one(date_str).text != '':
         date = notice.select_one(date_str).text.strip()
         date = date[:2] + ' ' + date[2:]
