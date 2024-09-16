@@ -14,40 +14,40 @@ notices_items = [
 
 notices_data = [
     [
+        notices_items[2],
+        notices_items[1],
         notices_items[0],
-        notices_items[1],
-        notices_items[2]
     ],
     [
+        notices_items[2],
+        notices_items[1],
         notices_items[0],
-        notices_items[1],
-        notices_items[2],
     ],
     [
+        notices_items[3],
+        notices_items[2],
         notices_items[1],
-        notices_items[2],
-        notices_items[3],
-    ],
-    [
-        notices_items[2],
-        notices_items[3],
-        notices_items[4],
     ],
     [
         notices_items[4],
-        notices_items[5],
-        notices_items[6],
+        notices_items[3],
+        notices_items[2],
     ],
     [
-        notices_items[5],
         notices_items[6],
+        notices_items[5],
+        notices_items[4],
+    ],
+    [
         notices_items[7],
+        notices_items[6],
+        notices_items[5],
     ]
 ]
 
 # Async function to simulate fetching new notices'
 count = 0
-async def fetch_new_notice(_: int):
+async def fetch_new_notice_test():
     global count
     
     if count == len(notices_data) - 1:

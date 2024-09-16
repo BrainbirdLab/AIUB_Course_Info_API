@@ -15,13 +15,7 @@ stop_event = threading.Event()
 
 NOTICE_LEN = 8
 
-client_url = os.environ.get('CLIENT_URL')
-
-VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
-
-aiub_portal_url = 'https://portal.aiub.edu'
-aiub_home_url = 'https://www.aiub.edu'
 
 # Redis keys
 CLIENTS_KEY = "connected_clients_1"  # Redis set to store clients
@@ -77,7 +71,6 @@ def format_notice(notice):
     else:
         return title
     
-
 # Async function to check AIUB notices
 async def fetch_new_notice():
     session = requests.Session()
@@ -164,17 +157,18 @@ def signal_handler(_, __):
 
 
 
-def send_web_push(subscription_information, message_body, title: str, data_type: str):
+def send_web_push(subscription_information, message_body, title: str, data_type: str, data: list):
     
-    data = json.dumps({
-        "data": message_body,
+    target = json.dumps({
+        "body": message_body,
         "title": title,
-        "type": data_type
+        "type": data_type,
+        "data": data
     })
     
     return webpush(
         subscription_info=subscription_information,
-        data=data,
+        data=target,
         vapid_private_key=VAPID_PRIVATE_KEY,
         vapid_claims=VAPID_CLAIMS,
         ttl=86400,  # 1 day TTL (in seconds)
@@ -190,6 +184,9 @@ def update_clients(notices: list, title: str, notice_type: str):
     
     # Get the clients from Redis
     clients = r.smembers(CLIENTS_KEY)  # Redis returns a set of bytes
+    
+    all_notices = r.lrange(NOTICE_CHANNEL, 0, -1)
+    all_notices = [notice.decode('utf-8') for notice in all_notices]
 
     for client in clients:
         try:
@@ -197,7 +194,7 @@ def update_clients(notices: list, title: str, notice_type: str):
             client = json.loads(client.decode('utf-8'))  # Decode from bytes and convert to dict
             # send reverse order of notices
             for notice in reversed(notices):
-                send_web_push(client, notice, title, notice_type)
+                send_web_push(client, notice, title, notice_type, all_notices)
         
         except WebPushException as ex:
             # Handle 410 Gone (unregistered client)

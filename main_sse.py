@@ -10,10 +10,9 @@ import os
 import re
 import json
 from dotenv import load_dotenv
-import redis
 from contextlib import asynccontextmanager
 
-from notice import check_aiub_notices, check_redis_connection, process_new_notices, signal_handler, update_clients, stop_event, redis_error_message, send_web_push, CLIENTS_KEY, NOTICE_CHANNEL
+from notice import r, check_aiub_notices, check_redis_connection, process_new_notices, signal_handler, update_clients, stop_event, redis_error_message, send_web_push, CLIENTS_KEY, NOTICE_CHANNEL
 
 load_dotenv()
 
@@ -21,20 +20,10 @@ load_dotenv()
 PORT = int(os.environ.get('PORT', 5000))
 
 client_url = os.environ.get('CLIENT_URL')
-
 VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
-VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 
 aiub_portal_url = 'https://portal.aiub.edu'
-aiub_home_url = 'https://www.aiub.edu'
 
-REDIS_URL = os.environ.get('REDIS_URL')
-
-# Redis client for storing connected clients and handling Pub/Sub
-r = redis.Redis.from_url(REDIS_URL)
-
-# Configurations
-aiub_home_url = 'https://www.aiub.edu'
 default_parser = 'html.parser'
 
 # Lifespan context manager to manage the app lifecycle
@@ -79,8 +68,12 @@ async def subscribe(subscription: dict):
         # Add subscription to Redis
         r.sadd(CLIENTS_KEY, json.dumps(subscription))
         
+        notices = r.lrange(NOTICE_CHANNEL, 0, -1)
+        
+        notices = [notice.decode('utf-8') for notice in notices]
+        
         # send a Thank you notification
-        send_web_push(subscription, "You would be updated with the future notifications", "Thank you", "server")
+        send_web_push(subscription, "You would be updated with the future notifications", "Thank you", "server", notices)
         return {"status": "success", "message": "Subscribed successfully"}
     
     except Exception as e:
@@ -126,14 +119,8 @@ async def push_notification(_: Request, auth: str, message: str):
     return update_clients([message], "Message from developer", 'dev')
 
 @app.get('/notices')
-async def get_notices(request: Request):
-    print('Request received')
-    ref = get_host(request.headers.get('referer'))
-    client_host = get_host(client_url)
-    
-    if ref != client_host:
-        return {"status": "error", "message": "Unauthorized request"}
-    
+async def get_notices():
+    print('Notice Request received')
     
     # Check Redis connection
     if not check_redis_connection():
@@ -150,15 +137,13 @@ async def get_notices(request: Request):
 
 @app.get("/login")
 async def forward_request(request: Request):
-    
-    ref = request.headers.get('referer')
 
     # query parameters
     username = request.query_params.get('username')
     password = request.query_params.get('password')
 
     # Return the streaming response
-    return StreamingResponse(event_stream(username, password, ref), media_type="text/event-stream")
+    return StreamingResponse(event_stream(username, password), media_type="text/event-stream")
 
 
 @app.get("*")
@@ -177,16 +162,8 @@ def get_host(url: str | None) -> str:
         return ''
 
 
-async def event_stream(username: str, password: str, ref):
+async def event_stream(username: str, password: str):
     try:
-        
-        ref_host = get_host(ref)
-        client_host = get_host(client_url)
-        
-        if ref_host != client_host:
-            print(f'Client: {client_host} mismatched with ref: {ref_host}')
-            yield f'data: {json.dumps({"status": "error", "message": "Unauthorized request"})}\n\n'
-            return
         
         # Notify the client that processing has started
         print('Processing request...')
