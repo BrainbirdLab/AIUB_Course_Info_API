@@ -157,13 +157,12 @@ def signal_handler(_, __):
 
 
 
-def send_web_push(subscription_information, message_body, title: str, data_type: str, data: list):
+def send_web_push(subscription_information, message_body, title: str, data_type: str):
     
     target = json.dumps({
         "body": message_body,
         "title": title,
         "type": data_type,
-        "data": data
     })
     
     return webpush(
@@ -184,9 +183,6 @@ def update_clients(notices: list, title: str, notice_type: str):
     
     # Get the clients from Redis
     clients = r.smembers(CLIENTS_KEY)  # Redis returns a set of bytes
-    
-    all_notices = r.lrange(NOTICE_CHANNEL, 0, -1)
-    all_notices = [notice.decode('utf-8') for notice in all_notices]
 
     for client in clients:
         try:
@@ -194,7 +190,7 @@ def update_clients(notices: list, title: str, notice_type: str):
             client = json.loads(client.decode('utf-8'))  # Decode from bytes and convert to dict
             # send reverse order of notices
             for notice in reversed(notices):
-                send_web_push(client, notice, title, notice_type, all_notices)
+                send_web_push(client, notice, title, notice_type)
         
         except WebPushException as ex:
             # Handle 410 Gone (unregistered client)

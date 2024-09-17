@@ -26,6 +26,8 @@ aiub_portal_url = 'https://portal.aiub.edu'
 
 default_parser = 'html.parser'
 
+print(f'Client URL: {client_url}')
+
 # Lifespan context manager to manage the app lifecycle
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -55,7 +57,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     # return html content
-    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.0.5</pre>")
+    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.0.6</pre>")
 
 
 @app.get('/getkey')
@@ -65,15 +67,12 @@ async def get_key():
 @app.post('/subscribe')
 async def subscribe(subscription: dict):
     try:
+        print("Subscription request received")
         # Add subscription to Redis
         r.sadd(CLIENTS_KEY, json.dumps(subscription))
         
-        notices = r.lrange(NOTICE_CHANNEL, 0, -1)
-        
-        notices = [notice.decode('utf-8') for notice in notices]
-        
         # send a Thank you notification
-        send_web_push(subscription, "You would be updated with the future notifications", "Thank you", "server", notices)
+        send_web_push(subscription, "You would be updated with the future notifications", "Thank you", "server")
         return {"status": "success", "message": "Subscribed successfully"}
     
     except Exception as e:
@@ -93,6 +92,7 @@ async def unsubscribe(subscription: dict):
     
     # Remove subscription from Redis
     r.srem(CLIENTS_KEY, json.dumps(subscription))
+    print("Someone unsubscribed successfully")
     return {"status": "success", "message": "Unsubscribed successfully"}
 
 
