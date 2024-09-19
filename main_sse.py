@@ -123,7 +123,8 @@ async def push_notification(request: PushNotificationRequest):
     if request.auth != auth_id or request.message == '':
         return {"status": "error", "message": "Unauthorized request or empty message"}
 
-    return update_clients([request.message], request.title, request.act)
+    update_clients([request.message], request.title, request.act)
+    return {"status": "success", "message": "Notification sent successfully"}
 
 @app.get('/notices')
 async def get_notices():
