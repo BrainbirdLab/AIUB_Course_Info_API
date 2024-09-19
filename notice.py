@@ -110,6 +110,7 @@ async def process_new_notices():
                 # Check if the new notices are different from the previous notices
                 new_notices = list(set(new_notices) - set(redis_notices))
                 if len(new_notices) > 0:
+                    print("New notices found, informing clients...")
                     # Store the new notices in Redis
                     r.lpush(NOTICE_CHANNEL, *new_notices)
                     current_notices_len = r.llen(NOTICE_CHANNEL)

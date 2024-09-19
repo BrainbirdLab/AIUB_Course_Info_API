@@ -3,6 +3,7 @@ import signal
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -57,7 +58,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     # return html content
-    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.0.6</pre>")
+    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.0.7</pre>")
 
 
 @app.get('/getkey')
@@ -109,14 +110,20 @@ async def subscription_status(subscription: dict):
         return {"status": "error", "message": "Subscription not found", "subscribed": False}
 
 
+class PushNotificationRequest(BaseModel):
+    auth: str
+    act: str
+    title: str
+    message: str
+
 # test dev trigger for notification
-@app.get('/push/{auth}/{message}')
-async def push_notification(_: Request, auth: str, message: str):
+@app.post('/push')
+async def push_notification(request: PushNotificationRequest):
     auth_id = os.environ.get('AUTH_ID')
-    if auth != auth_id and message == '':
-        return {"status": "error", "message": "Unauthorized request"}
-    
-    return update_clients([message], "Message from developer", 'dev')
+    if request.auth != auth_id or request.message == '':
+        return {"status": "error", "message": "Unauthorized request or empty message"}
+
+    return update_clients([request.message], request.title, request.act)
 
 @app.get('/notices')
 async def get_notices():
