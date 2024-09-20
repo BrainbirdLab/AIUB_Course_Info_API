@@ -119,9 +119,15 @@ class PushNotificationRequest(BaseModel):
 # test dev trigger for notification
 @app.post('/push')
 async def push_notification(request: PushNotificationRequest):
-    auth_id = os.environ.get('AUTH_ID')
-    if request.auth != auth_id or request.message == '':
-        return {"status": "error", "message": "Unauthorized request or empty message"}
+    auth_id = r.get('auth_id').decode('utf-8')
+    if request.auth != auth_id:
+        return {"status": "error", "message": "Invalid authentication"}
+    if request.title == '' or request.message == '':
+        return {"status": "error", "message": "Title and message are required"}
+    if request.act == '':
+        return {"status": "error", "message": "Act as type is required"}
+    if request.act not in ['server', 'dev', 'aiub']:
+        return {"status": "error", "message": "Act must be either server, dev or aiub"}
 
     update_clients([request.message], request.title, request.act)
     return {"status": "success", "message": "Notification sent successfully"}
