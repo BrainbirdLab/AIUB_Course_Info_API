@@ -108,7 +108,7 @@ async def process_new_notices():
                 # decode the notices from bytes to string
                 redis_notices = [notice.decode('utf-8') for notice in redis_notices]
                 # Check if the new notices are different from the previous notices
-                new_notices = list(set(new_notices) - set(redis_notices))
+                new_notices = list(set(new_notices).symmetric_difference(set(redis_notices)))
                 if len(new_notices) > 0:
                     print("New notices found, informing clients...")
                     # Store the new notices in Redis
