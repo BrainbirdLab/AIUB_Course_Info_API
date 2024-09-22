@@ -18,8 +18,8 @@ NOTICE_LEN = 8
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 
 # Redis keys
-CLIENTS_KEY = "connected_clients_1"  # Redis set to store clients
-NOTICE_CHANNEL = "notice_channel_1"  # Redis Pub/Sub channel for notices
+CLIENTS_KEY = "connected_clients_0"  # Redis set to store clients
+NOTICE_CHANNEL = "notice_channel_0"  # Redis Pub/Sub channel for notices
 
 REDIS_URL = os.environ.get('REDIS_URL')
 
@@ -104,25 +104,32 @@ async def process_new_notices():
                 # Update the clients with the new notices
                 update_clients(new_notices, 'American Internation University - Bangladesh', 'aiub')
             else:
-                redis_notices = r.lrange(NOTICE_CHANNEL, 0, -1)
-                # decode the notices from bytes to string
-                redis_notices = [notice.decode('utf-8') for notice in redis_notices]
-                # Check if the new notices are different from the previous notices
-                added_notices = list(set(new_notices) - set(redis_notices))
-                changed = len(list(set(new_notices).symmetric_difference(set(redis_notices))))
-                if changed != 0:
-                    # Store the new notices in Redis
-                    r.lpush(NOTICE_CHANNEL, *new_notices)
-                if len(added_notices) > 0:
-                    print("New notices found, informing clients...")
-                    current_notices_len = r.llen(NOTICE_CHANNEL)
-                    if current_notices_len > NOTICE_LEN:
-                        r.ltrim(NOTICE_CHANNEL, 0, NOTICE_LEN - 1)
-                    # Update the clients with the new notices
-                    update_clients(added_notices, 'American Internation University - Bangladesh', 'aiub')
+                inform_clients(new_notices)
 
     except Exception as e:
         print(f"Error processing notices: {e}")
+        
+
+def inform_clients(new_notices):
+    redis_notices = r.lrange(NOTICE_CHANNEL, 0, -1)
+    # decode the notices from bytes to string
+    redis_notices = [notice.decode('utf-8') for notice in redis_notices]
+    # Check if the new notices are different from the previous notices
+    added_notices = list(set(new_notices) - set(redis_notices))
+    changed = len(list(set(new_notices).symmetric_difference(set(redis_notices))))
+    if changed != 0:
+        # replace the old notices with new notices
+        r.delete(NOTICE_CHANNEL)
+        r.rpush(NOTICE_CHANNEL, *new_notices)
+    if len(added_notices) > 0:
+        print("New notices found, informing clients...")
+        current_notices_len = r.llen(NOTICE_CHANNEL)
+        if current_notices_len > NOTICE_LEN:
+            r.ltrim(NOTICE_CHANNEL, 0, NOTICE_LEN - 1)
+        # Update the clients with the new notices
+        update_clients(added_notices, 'American Internation University - Bangladesh', 'aiub')
+    else:
+        print("No new notices found")
 
 async def check_aiub_notices():
     try:
