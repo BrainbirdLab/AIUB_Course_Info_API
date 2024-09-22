@@ -108,18 +108,18 @@ async def process_new_notices():
                 # decode the notices from bytes to string
                 redis_notices = [notice.decode('utf-8') for notice in redis_notices]
                 # Check if the new notices are different from the previous notices
-                new_notices = list(set(new_notices) - set(redis_notices))
+                added_notices = list(set(new_notices) - set(redis_notices))
                 changed = len(list(set(new_notices).symmetric_difference(set(redis_notices))))
-                if changed != 0 and len(new_notices) > 0:
+                if changed != 0:
                     # Store the new notices in Redis
                     r.lpush(NOTICE_CHANNEL, *new_notices)
-                if len(new_notices) > 0:
+                if len(added_notices) > 0:
                     print("New notices found, informing clients...")
                     current_notices_len = r.llen(NOTICE_CHANNEL)
                     if current_notices_len > NOTICE_LEN:
                         r.ltrim(NOTICE_CHANNEL, 0, NOTICE_LEN - 1)
                     # Update the clients with the new notices
-                    update_clients(new_notices, 'American Internation University - Bangladesh', 'aiub')
+                    update_clients(added_notices, 'American Internation University - Bangladesh', 'aiub')
 
     except Exception as e:
         print(f"Error processing notices: {e}")
