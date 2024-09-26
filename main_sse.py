@@ -58,7 +58,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     # return html content
-    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.0.8</pre>")
+    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.0.10</pre>")
 
 
 @app.get('/getkey')
