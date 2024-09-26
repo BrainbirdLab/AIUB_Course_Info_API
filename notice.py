@@ -13,7 +13,7 @@ default_parser = 'html.parser'
 
 stop_event = threading.Event()
 
-NOTICE_LEN = 8
+NOTICE_LEN = 10  # Number of notices to check for new notices
 
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 
