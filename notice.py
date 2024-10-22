@@ -50,8 +50,6 @@ else:
 
 redis_error_message = "Error in connecting to Redis"
 
-TIME_TO_WAIT = int(os.environ.get('TIME_TO_WAIT', 60))  # Time to wait in seconds before checking for new notices
-
 VAPID_CLAIMS = {
     "sub": "mailto:fuad.cs22@gmail.com"
 }
@@ -153,42 +151,6 @@ def inform_clients(new_notices):
     else:
         print("No new notices found")
 
-async def check_aiub_notices():
-    try:
-        while not stop_event.is_set():
-            connected_clients = r.scard(CLIENTS_KEY)  # Check the number of connected clients
-            if connected_clients > 0:
-                await process_new_notices()
-            await asyncio.sleep(TIME_TO_WAIT) # Check for new notices every TIME_TO_WAIT seconds
-    except asyncio.CancelledError:
-        print("Task was cancelled")
-    finally:
-        print("Task ended")
-
-# Function to run in a separate thread
-def start_notice_checker():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(check_aiub_notices())
-    except asyncio.CancelledError:
-        pass
-    finally:
-        loop.stop()
-        loop.close()
-
-# Signal handler to stop the background thread
-def signal_handler(_, __):
-    try:
-        print("Stopping...")
-        stop_event.set()  # Signal the thread to stop
-        # stop the event loop
-        asyncio.get_event_loop().stop()
-    except Exception as e:
-        print(f"Error stopping: {e}")
-
-
-
 def send_web_push(subscription_information, message_body, title: str, data_type: str):
     
     target = json.dumps({
@@ -204,8 +166,6 @@ def send_web_push(subscription_information, message_body, title: str, data_type:
         vapid_claims=VAPID_CLAIMS,
         ttl=86400,  # 1 day TTL (in seconds)
     )
-
-
  
  
 def update_clients(notices: list, title: str, notice_type: str):

@@ -11,9 +11,8 @@ import os
 import re
 import json
 from dotenv import load_dotenv
-from contextlib import asynccontextmanager
 
-from notice import r, check_aiub_notices, check_redis_connection, process_new_notices, signal_handler, update_clients, stop_event, redis_error_message, send_web_push, CLIENTS_KEY, NOTICE_CHANNEL
+from notice import r, check_redis_connection, process_new_notices, update_clients, redis_error_message, send_web_push, CLIENTS_KEY, NOTICE_CHANNEL
 
 load_dotenv()
 
@@ -29,20 +28,7 @@ default_parser = 'html.parser'
 
 print(f'Client URL: {client_url}')
 
-# Lifespan context manager to manage the app lifecycle
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    signal.signal(signal.SIGINT, signal_handler)  # Handle Ctrl+C for clean shutdown
-    notice_task = asyncio.create_task(check_aiub_notices())  # Start the background task
-    try:
-        yield
-    finally:
-        stop_event.set()  # Stop the background task when shutting down
-        notice_task.cancel()  # Cancel the task gracefully
-        await notice_task  # Wait for task to complete
-        print("Background task stopped")
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 # Allow CORS to client_url
 app.add_middleware(
