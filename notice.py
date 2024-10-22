@@ -26,6 +26,28 @@ REDIS_URL = os.environ.get('REDIS_URL')
 # Redis client for storing connected clients and handling Pub/Sub
 r = redis.Redis.from_url(REDIS_URL)
 
+def check_redis_connection():
+    try:
+        # Ping Redis to check connection
+        if r.ping():
+            return True
+    except redis.AuthenticationError:
+        print("Authentication to Redis failed. Check your password.")
+        return False
+    except redis.ConnectionError:
+        print("Failed to connect to Redis. Check if Redis server is running and accessible.")
+        return False
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False
+
+# print redis connection status
+if check_redis_connection():
+    print("Connected to Redis")
+else:
+    print("Error in connecting to Redis")
+    
+
 redis_error_message = "Error in connecting to Redis"
 
 TIME_TO_WAIT = int(os.environ.get('TIME_TO_WAIT', 60))  # Time to wait in seconds before checking for new notices
