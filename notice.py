@@ -18,8 +18,8 @@ NOTICE_LEN = 10  # Number of notices to check for new notices
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 
 # Redis keys
-CLIENTS_KEY = "connected_clients_0"  # Redis set to store clients
-NOTICE_CHANNEL = "notice_channel_0"  # Redis Pub/Sub channel for notices
+CLIENTS_KEY = os.environ.get('CLIENTS_KEY')  # Redis key for storing connected clients
+NOTICE_CHANNEL = os.environ.get('NOTICE_CHANNEL')  # Redis key for storing notices
 
 REDIS_URL = os.environ.get('REDIS_URL')
 
