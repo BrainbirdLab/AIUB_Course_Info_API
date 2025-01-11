@@ -377,6 +377,9 @@ def get_completed_courses(cookies, session, current_semester: str):
 
         # Use regular expressions to extract the last result
         matches = re.findall(r'\(([^)]+)\)\s*\[([^\]]+)\]', results)
+        
+        grade: str = ''
+        semester: str = ''
 
         # Check if there are any matches
         if  len(matches) > 0:
@@ -390,7 +393,7 @@ def get_completed_courses(cookies, session, current_semester: str):
             continue
 
         if grade in ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F']:
-            completed_courses[course_code] = {'course_name': course_name, 'grade': grade}
+            completed_courses[course_code] = {'course_name': course_name, 'grade': grade, 'semester': semester}
         elif grade == '-':
             if semester == current_semester:
                 current_semester_courses[course_code] = {'course_name': course_name, 'grade': grade}
