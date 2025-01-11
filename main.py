@@ -109,7 +109,7 @@ async def cors(request, call_next):
 
 @app.get("/", response_class=JSONResponse)
 async def root():
-    return JSONResponse({'message': 'Welcome to AIUB Portal API v.2.0.1'+random.choice(list(emojis))})
+    return JSONResponse({'message': 'Welcome to AIUB Portal API v.2.0.2'+random.choice(list(emojis))})
 
 
 @app.post("/", response_class=JSONResponse)
