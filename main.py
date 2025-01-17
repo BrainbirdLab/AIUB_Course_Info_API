@@ -27,7 +27,7 @@ default_parser = 'html.parser'
 # Allow CORS to client_url
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[client_url],
+    allow_origins=[client_url, "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
@@ -109,7 +109,7 @@ async def cors(request, call_next):
 
 @app.get("/", response_class=JSONResponse)
 async def root():
-    return JSONResponse({'message': 'Welcome to AIUB Portal API v.2.0.2'+random.choice(list(emojis))})
+    return JSONResponse({'message': 'Welcome to AIUB Portal API v.2.0.3'+random.choice(list(emojis))})
 
 
 @app.post("/", response_class=JSONResponse)
