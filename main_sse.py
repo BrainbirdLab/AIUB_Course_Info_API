@@ -44,7 +44,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     # return html content
-    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.0.10</pre>")
+    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.1.0</pre>")
 
 
 @app.get('/getkey')
@@ -360,7 +360,8 @@ def process_curriculum(id: str, session, cookies):
 
     return course_map
 
-def get_completed_courses(cookies, session, current_semester: str): 
+
+def get_completed_courses(cookies, session, current_semester: str):
     url = 'https://portal.aiub.edu/Student/GradeReport/ByCurriculum'
     response = session.get(url, cookies=cookies)
     soup = BeautifulSoup(response.text, default_parser)
@@ -370,37 +371,59 @@ def get_completed_courses(cookies, session, current_semester: str):
     current_semester_courses = {}
     pre_registered_courses = {}
 
+    valid_grades = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F']
+
     for row in rows:
-        course_code = row.select_one('td:nth-child(1)').text.strip()
-        course_name = row.select_one('td:nth-child(2)').text.strip()
-        results = row.select_one('td:nth-child(3)').text.strip() 
+        process_row(row, completed_courses, current_semester_courses, pre_registered_courses, valid_grades, current_semester)
 
-        # Use regular expressions to extract the last result
-        matches = re.findall(r'\(([^)]+)\)\s*\[([^\]]+)\]', results)
-        
-        grade: str = ''
-        semester: str = ''
-
-        # Check if there are any matches
-        if  len(matches) > 0:
-            # Get the last match
-            last_result = matches[-1]
-            # Extract grade and semester from the last result
-            semester, grade = last_result
-            grade = grade.strip()
-            semester = semester.strip()
-        else:
-            continue
-
-        if grade in ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F']:
-            completed_courses[course_code] = {'course_name': course_name, 'grade': grade, 'semester': semester}
-        elif grade == '-':
-            if semester == current_semester:
-                current_semester_courses[course_code] = {'course_name': course_name, 'grade': grade}
-            else:
-                pre_registered_courses[course_code] = {'course_name': course_name, 'grade': grade}
-        
     return [completed_courses, current_semester_courses, pre_registered_courses]
+
+
+def process_row(row, completed_courses, current_semester_courses, pre_registered_courses, valid_grades, current_semester):
+    course_code = row.select_one('td:nth-child(1)').text.strip()
+    course_name = row.select_one('td:nth-child(2)').text.strip()
+    results = row.select_one('td:nth-child(3)').text.strip()
+
+    matches = re.findall(r'\(([^)]+)\)\s*\[([^\]]+)\]', results)
+
+    if matches:
+
+        last_result = matches[-1]
+        semester, grade = last_result
+        grade = grade.strip()
+        semester = semester.strip()
+
+        if grade == '-':
+            handle_incomplete_grade(matches, course_code, course_name, semester, current_semester, completed_courses, current_semester_courses, pre_registered_courses, valid_grades)
+        elif grade in valid_grades:
+            completed_courses[course_code] = {
+                'course_name': course_name,
+                'grade': grade,
+                'semester': semester
+            }
+
+
+def handle_incomplete_grade(matches, course_code, course_name, semester, current_semester, completed_courses, current_semester_courses, pre_registered_courses, valid_grades):
+    if semester == current_semester:
+        for match in reversed(matches[:-1]):
+            prev_semester, prev_grade = match
+            if prev_grade in valid_grades:
+                completed_courses[course_code] = {
+                    'course_name': course_name,
+                    'grade': prev_grade,
+                    'semester': prev_semester
+                }
+                break
+        current_semester_courses[course_code] = {
+            'course_name': course_name,
+            'grade': '-'
+        }
+    else:
+        pre_registered_courses[course_code] = {
+            'course_name': course_name,
+            'grade': '-'
+        }
+
 
 
 def process_semester(target, session, cookies):
