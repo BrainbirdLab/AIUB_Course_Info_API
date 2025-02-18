@@ -1,5 +1,3 @@
-import asyncio
-import signal
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -141,6 +139,9 @@ async def forward_request(request: Request):
     # query parameters
     username = request.query_params.get('username')
     password = request.query_params.get('password')
+    
+    print(username)
+    print(password)
 
     # Return the streaming response
     return StreamingResponse(event_stream(username, password), media_type="text/event-stream")
@@ -194,6 +195,7 @@ async def event_stream(username: str, password: str):
                 yield f'data: {json.dumps({"status": "error", "message": "Captcha required. Solve it from portal."})}\n\n'
                 return
             print('Invalid username or password')
+            print(f'Response URL: "{response.url}"')
             yield f'data: {json.dumps({"status": "error", "message": "Invalid username or password"})}\n\n'
             return
         
