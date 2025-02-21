@@ -139,9 +139,6 @@ async def forward_request(request: Request):
     # query parameters
     username = request.query_params.get('username')
     password = request.query_params.get('password')
-    
-    print(username)
-    print(password)
 
     # Return the streaming response
     return StreamingResponse(event_stream(username, password), media_type="text/event-stream")
