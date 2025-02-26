@@ -42,7 +42,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     # return html content
-    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.1.0</pre>")
+    return HTMLResponse(content="<h2>Wanna join the party? 🎉</h2><br>Contact with us to get involved <a href='mailto:fuad.cs22@gmail.com'>here</a><br><pre>version: 2.1.1</pre>")
 
 
 @app.get('/getkey')
@@ -180,7 +180,11 @@ async def event_stream(username: str, password: str):
         response = session.post(aiub_portal_url, data={'UserName': username, 'Password': password})
 
         if response.status_code != 200:
-            print("Error in req")
+            if response.status_code >= 500:
+                print('Server error. Try again later')
+                yield f'data: {json.dumps({"status": "error", "message": "AIUB Server error. Try again later"})}\n\n'
+                return
+            print("Error in request")
             yield f'data: {json.dumps({"status": "error", "message": "Error in request"})}\n\n'
             return
 
