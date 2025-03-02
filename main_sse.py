@@ -308,6 +308,8 @@ def should_skip_course(course_code, course, completed_courses, current_semester_
     if course_code in completed_courses:
         completed_courses[course_code]['credit'] = course['credit']
         return True
+    if course_code == '0':
+        return True
     if '#' in course_code or '*' in course_code:
         return True
     if course['course_name'] == 'INTERNSHIP':
