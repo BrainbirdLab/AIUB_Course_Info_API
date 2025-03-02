@@ -304,15 +304,21 @@ def add_unlocked_courses(course_map, completed_courses, current_semester_courses
 
     return unlocked_courses
 
-def should_skip_course(course_code, course, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
-    if course_code in completed_courses:
-        completed_courses[course_code]['credit'] = course['credit']
-        return True
+def skip_primary(all_courses, course_code):
     if course_code == '0':
         return True
     if '#' in course_code or '*' in course_code:
         return True
-    if course['course_name'] == 'INTERNSHIP':
+    if all_courses['course_name'] == 'INTERNSHIP':
+        return True
+
+    return False
+
+def should_skip_course(course_code, course, completed_courses, current_semester_courses, pre_registered_courses, unlocked_courses):
+    if skip_primary(course, course_code):
+        return True
+    if course_code in completed_courses:
+        completed_courses[course_code]['credit'] = course['credit']
         return True
     if course_code in unlocked_courses:
         return True
@@ -345,7 +351,6 @@ def get_curricumn_data(cookies, session):
     for _id in curricumn_id:
         course_map.update(process_curriculum(_id, session, cookies))
 
-
     return course_map
 
 def process_curriculum(id: str, session, cookies):
@@ -358,6 +363,10 @@ def process_curriculum(id: str, session, cookies):
     for course in table:
         course_code = course.select_one('td:nth-child(1)').text.strip()
         course_name = course.select_one('td:nth-child(2)').text.strip()
+        
+        if skip_primary({'course_name': course_name}, course_code):
+            continue
+        
         credit = course.select_one('td:nth-child(3)').text.strip()
         credit = sorted([int(c) for c in credit.split(' ')], reverse=True)[0]
         prerequisites = [li.text.strip() for li in course.select('td:nth-child(4) li')]
