@@ -71,8 +71,8 @@ def check_redis_connection():
     
 
 def format_notice(notice):
-    date_str = '.date'
-    title = notice.select_one('.card-title').text
+    date_str = '.date-custom'
+    title = notice.select_one('.notification-text').text.strip()
     date = ''
     
     link = notice.select_one('a')
@@ -86,7 +86,11 @@ def format_notice(notice):
         
     if notice.select_one(date_str).text != '':
         date = notice.select_one(date_str).text.strip()
-        date = date[:2] + ' ' + date[2:]
+        parts = date.split('\r\n')
+        if len(parts) > 1:
+            date = parts[0].strip() + ' ' + parts[1].strip()
+        else:
+            date = parts[0].strip()
         return f"{date}::{title}"
     else:
         return title
@@ -101,10 +105,11 @@ async def fetch_new_notice():
     
     global NOTICE_LEN
     
-    notices = soup.select('.notice-item')
+    notices = soup.select('.notice-page .notification')
     if len(notices) > 0:
         # Get the last Count notices, If notices are less than Count, get all minimum notices
         NOTICE_LEN = min(NOTICE_LEN, len(notices))
+        print(notices)
         for notice in notices[:NOTICE_LEN]:
             formatted_notice = format_notice(notice)
             notice_list.append(formatted_notice)
